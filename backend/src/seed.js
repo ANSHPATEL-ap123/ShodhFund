@@ -1,0 +1,76 @@
+export function seed() {
+  const users = [
+    { id: "u-pi", name: "Dr. Arjun Sharma", email: "arjun.sharma@university.edu", password: "demo1234", dept: "Biotechnology", designation: "Associate Professor", role: "PI" },
+    { id: "u-fin", name: "Rohit Mehta", email: "rohit.mehta@university.edu", password: "demo1234", dept: "Accounts", designation: "Senior Finance Officer", role: "FINANCE" },
+    { id: "u-adm", name: "Dr. Meera Iyer", email: "meera.iyer@university.edu", password: "demo1234", dept: "Research Office", designation: "Dean — Research", role: "ADMIN" },
+    { id: "u-aud", name: "S.K. Verma", email: "sk.verma@university.edu", password: "demo1234", dept: "Internal Audit", designation: "Senior Auditor", role: "AUDITOR" },
+    { id: "u-pi2", name: "Dr. Priya Verma", email: "priya.verma@university.edu", password: "demo1234", dept: "Computer Science", designation: "Professor", role: "PI" },
+    { id: "u-pi3", name: "Dr. Kumar Iyer", email: "kumar.iyer@university.edu", password: "demo1234", dept: "Chemistry", designation: "Assistant Professor", role: "PI" },
+  ];
+
+  const grants = [
+    { id: "GR-DST-2401", title: "CRISPR-based diagnostics for AMR pathogens", agency: "DST", amount: 8450000, spent: 5620000, start: "2024-04-01", end: "2027-03-31", status: "ACTIVE", piId: "u-pi", pi: "Dr. Arjun Sharma", department: "Biotechnology", ucDue: "2026-09-30" },
+    { id: "GR-SERB-2318", title: "Metabolic engineering of microbial hosts", agency: "SERB", amount: 6200000, spent: 4180000, start: "2023-10-01", end: "2026-09-30", status: "ACTIVE", piId: "u-pi", pi: "Dr. Arjun Sharma", department: "Biotechnology", ucDue: "2026-08-31" },
+    { id: "GR-ICMR-2512", title: "Point-of-care TB assay validation", agency: "ICMR", amount: 9850000, spent: 6900000, start: "2025-01-15", end: "2028-01-14", status: "ACTIVE", piId: "u-pi", pi: "Dr. Arjun Sharma", department: "Biotechnology", ucDue: "2026-10-15" },
+    { id: "GR-UGC-2209", title: "Computational genomics core facility", agency: "UGC", amount: 4120000, spent: 4010000, start: "2022-07-01", end: "2026-06-30", status: "ACTIVE", piId: "u-pi2", pi: "Dr. Priya Verma", department: "Computer Science", ucDue: "2026-08-20" },
+    { id: "GR-CSIR-2411", title: "Green catalysis for pharma intermediates", agency: "CSIR", amount: 5300000, spent: 2100000, start: "2024-08-01", end: "2027-07-31", status: "ACTIVE", piId: "u-pi3", pi: "Dr. Kumar Iyer", department: "Chemistry", ucDue: "2026-11-01" },
+    { id: "GR-DST-2390", title: "National biorepository network node", agency: "DST", amount: 15200000, spent: 9800000, start: "2023-04-01", end: "2026-03-31", status: "ACTIVE", piId: "u-pi2", pi: "Dr. Priya Verma", department: "Computer Science", ucDue: "2026-09-01" },
+  ];
+
+  const budgetHeads = [
+    { id: "bh-1", grantId: "GR-DST-2401", name: "Equipment", allocated: 3500000, spent: 2100000 },
+    { id: "bh-2", grantId: "GR-DST-2401", name: "Consumables", allocated: 1800000, spent: 1200000 },
+    { id: "bh-3", grantId: "GR-DST-2401", name: "Travel", allocated: 600000, spent: 180000 },
+    { id: "bh-4", grantId: "GR-DST-2401", name: "Contingency", allocated: 400000, spent: 140000 },
+    { id: "bh-5", grantId: "GR-DST-2401", name: "Manpower", allocated: 1500000, spent: 1500000 },
+    { id: "bh-6", grantId: "GR-DST-2401", name: "Overhead", allocated: 650000, spent: 500000 },
+    { id: "bh-7", grantId: "GR-SERB-2318", name: "Equipment", allocated: 2200000, spent: 1600000 },
+    { id: "bh-8", grantId: "GR-SERB-2318", name: "Consumables", allocated: 1800000, spent: 1100000 },
+    { id: "bh-9", grantId: "GR-SERB-2318", name: "Travel", allocated: 500000, spent: 220000 },
+    { id: "bh-10", grantId: "GR-ICMR-2512", name: "Equipment", allocated: 4000000, spent: 2800000 },
+    { id: "bh-11", grantId: "GR-ICMR-2512", name: "Consumables", allocated: 2500000, spent: 1900000 },
+    { id: "bh-12", grantId: "GR-UGC-2209", name: "Equipment", allocated: 2300000, spent: 2200000 },
+    { id: "bh-13", grantId: "GR-CSIR-2411", name: "Consumables", allocated: 1800000, spent: 700000 },
+  ];
+
+  const expenses = [
+    { id: "EXP-1042", grantId: "GR-DST-2401", vendor: "Thermo Fisher Scientific", invoice: "TFS/DEL/88421", amount: 428500, date: "2026-07-12", head: "Equipment", status: "SUBMITTED", compliance: "COMPLIANT", gst: "07AABCT3518Q1Z4", description: "QuantStudio reagents", submittedById: "u-pi" },
+    { id: "EXP-1041", grantId: "GR-DST-2401", vendor: "MakeMyTrip Business", invoice: "MMT-B2B-9921", amount: 48200, date: "2026-07-08", head: "Travel", status: "APPROVED", compliance: "WARNING", gst: "07AADCM5146R1ZV", description: "Conference travel Delhi–Pune", submittedById: "u-pi" },
+    { id: "EXP-1039", grantId: "GR-SERB-2318", vendor: "Sigma-Aldrich", invoice: "SA-IN-12011", amount: 91200, date: "2026-07-02", head: "Consumables", status: "APPROVED", compliance: "COMPLIANT", gst: "27AABCS1234A1Z9", description: "Culture media lot", submittedById: "u-pi" },
+    { id: "EXP-1038", grantId: "GR-ICMR-2512", vendor: "Office Depot India", invoice: "ODI-44190", amount: 18500, date: "2026-06-28", head: "Contingency", status: "CORRECTION_REQUESTED", compliance: "WARNING", gst: "07AAACO0000A1Z1", description: "Stationery — GSTIN checksum fail", submittedById: "u-pi" },
+    { id: "EXP-1035", grantId: "GR-DST-2401", vendor: "Thermo Fisher Scientific", invoice: "TFS/DEL/88421", amount: 428500, date: "2026-07-14", head: "Equipment", status: "SUBMITTED", compliance: "NON_COMPLIANT", gst: "07AABCT3518Q1Z4", description: "Duplicate of EXP-1042", submittedById: "u-pi" },
+    { id: "EXP-1028", grantId: "GR-UGC-2209", vendor: "Dell Technologies", invoice: "DELL-IN-7721", amount: 186000, date: "2026-06-11", head: "Equipment", status: "APPROVED", compliance: "COMPLIANT", gst: "29AABCD1234E1Z5", description: "Workstation", submittedById: "u-pi2" },
+    { id: "EXP-1021", grantId: "GR-CSIR-2411", vendor: "IRCTC Tourism", invoice: "IR-88921", amount: 12400, date: "2026-05-22", head: "Travel", status: "REJECTED", compliance: "WARNING", gst: "07AAACI0000A1Z8", description: "Unapproved personal travel", submittedById: "u-pi3" },
+    { id: "EXP-1019", grantId: "GR-DST-2390", vendor: "Qiagen India", invoice: "QI-77210", amount: 265000, date: "2026-07-01", head: "Consumables", status: "SUBMITTED", compliance: "COMPLIANT", gst: "07AAACQ1234A1Z8", description: "Extraction kits", submittedById: "u-pi2" },
+  ];
+
+  const anomalies = [
+    { id: "AN-01", severity: "HIGH", reason: "Duplicate invoice TFS/DEL/88421 (EXP-1042 & EXP-1035)", expenseId: "EXP-1035", resolved: false },
+    { id: "AN-02", severity: "MEDIUM", reason: "Travel claim exceeds GFR metro DA cap (₹4,820 vs ₹4,500)", expenseId: "EXP-1041", resolved: false },
+    { id: "AN-03", severity: "HIGH", reason: "Vendor GSTIN checksum failed", expenseId: "EXP-1038", resolved: false },
+  ];
+
+  const notifications = [
+    { id: "n1", userId: "u-pi", title: "UC due in 41 days", message: "DST CRISPR grant UC for FY 2025-26 is due 30 Sep 2026.", type: "UC_DUE", read: false },
+    { id: "n2", userId: "u-pi", title: "Expense pending approval", message: "Thermo Fisher invoice ₹4,28,500 awaits finance verification.", type: "APPROVAL_PENDING", read: false },
+    { id: "n3", userId: "u-fin", title: "Anomaly flagged", message: "Duplicate bill detected on GR-DST-2401.", type: "ANOMALY_DETECTED", read: false },
+    { id: "n4", userId: "u-adm", title: "NIRF window", message: "Research metrics snapshot ready for review.", type: "GENERAL", read: false },
+  ];
+
+  const approvals = [];
+  const auditLogs = [
+    { id: "al-1", action: "SEED", entityType: "System", entityId: "init", userId: "u-adm", createdAt: "2026-07-01T09:00:00.000Z", metadata: { note: "Demo database seeded" } },
+  ];
+  const ucs = [];
+  const milestones = [
+    { id: "m1", grantId: "GR-DST-2401", title: "Assay protocol locked", dueDate: "2026-09-15", status: "IN_PROGRESS" },
+    { id: "m2", grantId: "GR-DST-2401", title: "Field validation n=200", dueDate: "2026-12-01", status: "PENDING" },
+    { id: "m3", grantId: "GR-SERB-2318", title: "Strain library deposit", dueDate: "2026-08-20", status: "DELAYED" },
+  ];
+  const objections = [
+    { id: "ob-1", title: "Duplicate equipment invoice", status: "OPEN", grantId: "GR-DST-2401", note: "Recommend recovery of ₹4,28,500" },
+    { id: "ob-2", title: "Missing asset tag on PCR", status: "OPEN", grantId: "GR-DST-2401", note: "GFR asset register incomplete" },
+  ];
+
+  return { users, grants, budgetHeads, expenses, anomalies, notifications, approvals, auditLogs, ucs, milestones, objections };
+}

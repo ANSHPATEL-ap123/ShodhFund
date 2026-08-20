@@ -1,51 +1,49 @@
-# Install ShodhFund on your laptop
+# Install ShodhFund (Windows / laptop)
 
-Need **Node.js 20+** (`node -v`).
+Need Node.js 20+: https://nodejs.org (`node -v`)
 
-## 1. Open the project
+## Install
 
-```bash
-cd shodhfund
+```bat
+cd F:\Desktop\shodhfund\backend
+npm install
+
+cd F:\Desktop\shodhfund\frontend
+npm install
 ```
 
-## 2. Install (both apps)
+## Run (2 terminals)
 
-```bash
-cd backend && npm install && cd ..
-cd frontend && npm install && cd ..
-```
-
-## 3. Run — two terminals
-
-**Terminal 1 — backend**
-
-```bash
-cd backend
+**1 — API**
+```bat
+cd F:\Desktop\shodhfund\backend
 npm run dev
 ```
+Expect: `ShodhFund API http://localhost:4000`
 
-API: http://localhost:4000/api/health
-
-**Terminal 2 — frontend**
-
-```bash
-cd frontend
+**2 — UI**
+```bat
+cd F:\Desktop\shodhfund\frontend
 npm run dev
 ```
+Open **http://localhost:3000**
 
-App: **http://localhost:3000**
+## Demo accounts (password `demo1234`)
 
-## Demo
+| Role | Email |
+|------|--------|
+| PI | arjun.sharma@university.edu |
+| Finance | rohit.mehta@university.edu |
+| Admin | meera.iyer@university.edu |
+| Auditor | sk.verma@university.edu |
 
-1. Login — `arjun.sharma@university.edu` / any password  
-2. Pick role  
-3. PI → **+ Add Expense** (OCR hits backend `/api/ocr/extract`)  
-4. **Utilization Cert.** → Generate UC (`/api/uc/generate`)
+## Working demo path
 
-## Troubleshooting
+1. Login as PI → Add Expense (OCR) → Submit  
+2. Switch role → Finance → Expense Verification → Approve  
+3. Switch role → PI → Utilization Cert. → Generate UC  
+4. Auditor → Audit Trail (actions logged)
 
-| Issue | Fix |
-|--------|-----|
-| Frontend loads but OCR fails | Backend not running on 4000 |
-| Port in use | `npm run dev -- -p 3001` (frontend) or `PORT=4001 npm run dev` (backend) |
-| `next: not found` | `cd frontend && npm install` |
+If login fails: backend band hai. `ERR_MODULE_NOT_FOUND express` = `npm install` backend folder mein nahi chala.
+
+GitHub steps: see **GUIDE.md**

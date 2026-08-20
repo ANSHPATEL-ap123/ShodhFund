@@ -1,41 +1,54 @@
 "use client";
-import { useState } from "react";
-import { grants } from "@/lib/data";
+import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
+import { getUser } from "@/lib/session";
+import type { Grant } from "@/lib/types";
 import { ScanLine, Upload, X } from "lucide-react";
 
-export function AddExpense() {
+export function AddExpense({ onCreated }: { onCreated?: () => void }) {
   const [open, setOpen] = useState(false);
+  const [grants, setGrants] = useState<Grant[]>([]);
   const [loading, setLoading] = useState(false);
   const [extracted, setExtracted] = useState(false);
   const [toast, setToast] = useState("");
   const [form, setForm] = useState({
-    grant: grants[0].id,
+    grantId: "",
     head: "Equipment",
     vendor: "",
     invoice: "",
     amount: "",
     date: "",
     gst: "",
-    desc: "",
+    description: "",
   });
 
-  function simulateOCR() {
+  useEffect(() => {
+    api<Grant[]>("/api/grants").then((g) => {
+      setGrants(g);
+      setForm((f) => ({ ...f, grantId: f.grantId || g[0]?.id || "" }));
+    }).catch(() => {});
+  }, []);
+
+  async function runOcr() {
     setLoading(true);
-    setTimeout(() => {
+    try {
+      const data = await api<{
+        vendor: string; invoice: string; amount: string; date: string; gst: string; desc: string; head: string;
+      }>("/api/ocr/extract", { method: "POST", body: JSON.stringify({ hint: "equipment" }) });
       setForm((f) => ({
         ...f,
-        vendor: "Thermo Fisher Scientific",
-        invoice: "TFS/DEL/88421",
-        amount: "428500",
-        date: "2026-07-12",
-        gst: "07AABCT3518Q1Z4",
-        desc: "QuantStudio 5 Real-Time PCR System — consumable kit lot",
-        head: "Equipment",
+        vendor: data.vendor,
+        invoice: data.invoice,
+        amount: data.amount,
+        date: data.date,
+        gst: data.gst,
+        description: data.desc,
+        head: data.head,
       }));
       setExtracted(true);
+    } finally {
       setLoading(false);
-    }, 1400);
+    }
   }
 
   return (
@@ -52,34 +65,31 @@ export function AddExpense() {
             <div className="grid md:grid-cols-2 gap-0">
               <div className="p-5 border-r border-border">
                 <button
-                  onClick={simulateOCR}
+                  onClick={runOcr}
                   className="w-full h-48 border-2 border-dashed border-border rounded-xl flex flex-col items-center justify-center text-sm text-muted hover:bg-surface"
                 >
-                  {loading ? (
-                    <span>Extracting with Gemini Flash…</span>
-                  ) : extracted ? (
+                  {loading ? "Extracting bill fields…" : extracted ? (
                     <>
                       <ScanLine className="w-6 h-6 text-success mb-2" />
-                      <span className="text-ink">bill-equipment.pdf</span>
-                      <span className="text-xs mt-1 text-success">Fields extracted</span>
+                      <span className="text-ink">bill extracted</span>
                     </>
                   ) : (
                     <>
                       <Upload className="w-6 h-6 mb-2" />
-                      Drop a bill or click to simulate OCR
+                      Click to run demo OCR
                     </>
                   )}
                 </button>
               </div>
               <div className="p-5 space-y-3">
                 <label className="text-xs text-muted block">Grant
-                  <select className="mt-1" value={form.grant} onChange={(e) => setForm({ ...form, grant: e.target.value })}>
-                    {grants.map((g) => <option key={g.id}>{g.id}</option>)}
+                  <select className="mt-1" value={form.grantId} onChange={(e) => setForm({ ...form, grantId: e.target.value })}>
+                    {grants.map((g) => <option key={g.id} value={g.id}>{g.id}</option>)}
                   </select>
                 </label>
-                <label className="text-xs text-muted block">Budget head {extracted && <span className="text-pi">(AI suggested)</span>}
+                <label className="text-xs text-muted block">Budget head
                   <select className="mt-1" value={form.head} onChange={(e) => setForm({ ...form, head: e.target.value })}>
-                    {["Equipment", "Consumables", "Travel", "Contingency"].map((h) => <option key={h}>{h}</option>)}
+                    {["Equipment", "Consumables", "Travel", "Contingency", "Manpower", "Overhead"].map((h) => <option key={h}>{h}</option>)}
                   </select>
                 </label>
                 {(["vendor", "invoice", "amount", "date", "gst"] as const).map((k) => (
@@ -87,10 +97,6 @@ export function AddExpense() {
                     <input className="mt-1" value={form[k]} onChange={(e) => setForm({ ...form, [k]: e.target.value })} />
                   </label>
                 ))}
-                <div className="flex items-center gap-2">
-                  <span className="badge bg-teal-50 text-teal-800">COMPLIANT</span>
-                  <span className="text-[11px] text-muted">GFR Rule 149 · GeM preferred · GSTIN valid</span>
-                </div>
               </div>
             </div>
             <div className="px-5 py-4 border-t border-border flex justify-end gap-2">
@@ -98,13 +104,14 @@ export function AddExpense() {
               <button
                 className="btn-lime"
                 onClick={async () => {
-                  await fetch("/api/expenses", {
+                  const user = getUser();
+                  const created = await api<{ id: string; compliance: string }>("/api/expenses", {
                     method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify(form),
+                    body: JSON.stringify({ ...form, submittedById: user?.id }),
                   });
                   setOpen(false);
-                  setToast("Expense submitted for approval. Compliance: Pass");
+                  setToast(`Saved ${created.id}. GFR: ${created.compliance}`);
+                  onCreated?.();
                   setTimeout(() => setToast(""), 3500);
                 }}
               >

@@ -1,15 +1,20 @@
 # ShodhFund
 
-Research Funding, Simplified. SIH 2026 prototype (USICT013).
+Research Funding, Simplified. SIH 2026 — USICT013.
+
+Working Phase 1 prototype: GFR-aware grant expenses, finance approval, UC drafts.
 
 ```
 shodhfund/
-├── frontend/     Next.js 15 UI  →  http://localhost:3000
-└── backend/      Express API    →  http://localhost:4000
+├── frontend/     Next.js  → http://localhost:3000
+├── backend/      Express  → http://localhost:4000
+├── INSTALL.md    laptop setup
+└── GUIDE.md      phases + GitHub push
 ```
 
-## Install & run
+```bat
+cd backend && npm install && npm run dev
+cd frontend && npm install && npm run dev
+```
 
-See **INSTALL.md**.
-
-Frontend talks to backend via `/api/*` (Next.js rewrites to port 4000).
+Password for all demo users: `demo1234`

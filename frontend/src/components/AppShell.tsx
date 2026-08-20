@@ -1,11 +1,13 @@
 "use client";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 import { Logo } from "./Logo";
-import { users, type Role } from "@/lib/data";
+import { getUser, logout, viewRole } from "@/lib/session";
+import type { Role, User } from "@/lib/types";
 import {
   LayoutDashboard, FolderKanban, Receipt, FileText, Flag, Bell, Settings, HelpCircle,
-  ShieldCheck, PieChart, Building2, ClipboardList, History, AlertTriangle, Wallet, BookOpen
+  ShieldCheck, PieChart, Building2, ClipboardList, History, AlertTriangle, Wallet, BookOpen, LogOut, Settings
 } from "lucide-react";
 
 const nav: Record<Role, { href: string; label: string; icon: typeof LayoutDashboard }[]> = {
@@ -46,9 +48,19 @@ const accent: Record<Role, string> = { PI: "#1E40AF", FINANCE: "#0F766E", ADMIN:
 
 export function AppShell({ role, children }: { role: Role; children: React.ReactNode }) {
   const pathname = usePathname();
-  const user = users[role];
-  const items = nav[role];
+  const router = useRouter();
+  const [user, setUser] = useState<User | null>(null);
   const color = accent[role];
+  const items = nav[role];
+
+  useEffect(() => {
+    const u = getUser();
+    if (!u) {
+      router.replace("/login");
+      return;
+    }
+    setUser(u);
+  }, [router]);
 
   return (
     <div className="min-h-screen bg-surface flex">
@@ -76,23 +88,29 @@ export function AppShell({ role, children }: { role: Role; children: React.React
           <Link href="/select-role" className="flex items-center gap-2 px-3 py-2 text-[13px] text-ink-2">
             <HelpCircle className="w-4 h-4" /> Switch role
           </Link>
-          <div className="flex items-center gap-2 px-3 py-2 text-[13px] text-ink-2">
-            <Settings className="w-4 h-4" /> Settings
-          </div>
+          <button
+            className="flex items-center gap-2 px-3 py-2 text-[13px] text-ink-2 w-full"
+            onClick={() => {
+              logout();
+              router.push("/login");
+            }}
+          >
+            <LogOut className="w-4 h-4" /> Log out
+          </button>
         </div>
       </aside>
       <div className="flex-1 min-w-0">
         <header className="h-16 bg-white border-b border-border px-6 flex items-center justify-between">
-          <div className="text-sm text-muted">Dashboard</div>
+          <div className="text-sm text-muted">Viewing as {role}{user && viewRole() !== user.role ? " (demo switch)" : ""}</div>
           <div className="flex items-center gap-3">
             <span className="badge text-white" style={{ background: color }}>{role}</span>
             <Bell className="w-4 h-4 text-muted" />
             <div className="w-8 h-8 rounded-full bg-black text-white text-xs flex items-center justify-center">
-              {user.name.split(" ").slice(-1)[0][0]}
+              {(user?.name || "U").split(" ").slice(-1)[0][0]}
             </div>
             <div className="text-right hidden sm:block">
-              <div className="text-[13px] font-medium leading-4">{user.name}</div>
-              <div className="text-[11px] text-muted">{user.dept}</div>
+              <div className="text-[13px] font-medium leading-4">{user?.name || "…"}</div>
+              <div className="text-[11px] text-muted">{user?.dept}</div>
             </div>
           </div>
         </header>
@@ -124,6 +142,13 @@ export function StatusChip({ s }: { s: string }) {
     HIGH: "bg-rose-50 text-rose-800",
     MEDIUM: "bg-amber-50 text-amber-800",
     LOW: "bg-slate-100 text-slate-700",
+    DRAFT: "bg-slate-100 text-slate-700",
+    IN_PROGRESS: "bg-blue-50 text-blue-800",
+    DELAYED: "bg-rose-50 text-rose-800",
+    PENDING: "bg-amber-50 text-amber-800",
+    OPEN: "bg-amber-50 text-amber-800",
   };
-  return <span className={`badge ${map[s] || "bg-slate-100"}`}>{s.replaceAll("_", " ")}</span>;
+  return <span className={`badge ${map[s] || "bg-slate-100"}`}>{String(s).replaceAll("_", " ")}</span>;
 }
+
+

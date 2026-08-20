@@ -1,6 +1,8 @@
 "use client";
 import { Logo } from "@/components/Logo";
-import Link from "next/link";
+import { api } from "@/lib/api";
+import { saveUser } from "@/lib/session";
+import type { User } from "@/lib/types";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
@@ -8,6 +10,8 @@ export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState("arjun.sharma@university.edu");
   const [password, setPassword] = useState("demo1234");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
 
   return (
     <div className="min-h-screen bg-surface grid md:grid-cols-2">
@@ -20,12 +24,20 @@ export default function LoginPage() {
             className="mt-8 space-y-4"
             onSubmit={async (e) => {
               e.preventDefault();
-              await fetch("/api/auth/login", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ email, password }),
-              });
-              router.push("/select-role");
+              setBusy(true);
+              setError("");
+              try {
+                const res = await api<{ user: User }>("/api/auth/login", {
+                  method: "POST",
+                  body: JSON.stringify({ email, password }),
+                });
+                saveUser(res.user);
+                router.push("/select-role");
+              } catch (err) {
+                setError(err instanceof Error ? err.message : "Login failed");
+              } finally {
+                setBusy(false);
+              }
             }}
           >
             <div>
@@ -33,28 +45,25 @@ export default function LoginPage() {
               <input className="mt-1" value={email} onChange={(e) => setEmail(e.target.value)} type="email" />
             </div>
             <div>
-              <div className="flex justify-between">
-                <label className="text-xs font-medium text-muted">Password</label>
-                <button type="button" className="text-xs text-info">Forgot Password?</button>
-              </div>
+              <label className="text-xs font-medium text-muted">Password</label>
               <input className="mt-1" value={password} onChange={(e) => setPassword(e.target.value)} type="password" />
             </div>
-            <label className="flex items-center gap-2 text-sm text-ink-2">
-              <input type="checkbox" defaultChecked className="w-4 h-4" /> Remember me
-            </label>
-            <button className="btn-black w-full justify-center" type="submit">Sign In</button>
+            {error && <p className="text-sm text-danger">{error}</p>}
+            <button className="btn-black w-full justify-center" type="submit" disabled={busy}>
+              {busy ? "Signing in…" : "Sign In"}
+            </button>
           </form>
-          <div className="my-6 flex items-center gap-3 text-xs text-muted">
-            <div className="flex-1 h-px bg-border" /> or continue with <div className="flex-1 h-px bg-border" />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <button className="btn-outline justify-center text-sm">Google</button>
-            <button className="btn-outline justify-center text-sm">Microsoft</button>
-          </div>
-          <p className="text-xs text-muted mt-8">
-            Don’t have an account? <span className="text-ink font-medium">Contact Administrator</span>
+          <p className="text-[12px] text-muted mt-6 leading-5">
+            Demo password for all accounts: <b className="text-ink">demo1234</b>
+            <br />
+            PI: arjun.sharma@university.edu
+            <br />
+            Finance: rohit.mehta@university.edu
+            <br />
+            Admin: meera.iyer@university.edu
+            <br />
+            Auditor: sk.verma@university.edu
           </p>
-          <p className="text-[11px] text-muted mt-4">Demo: any password works. Demo users are pre-seeded.</p>
         </div>
       </div>
       <div className="hidden md:flex bg-[#0A2540] items-center justify-center p-12 relative overflow-hidden">
@@ -63,21 +72,8 @@ export default function LoginPage() {
           <p className="text-[#C8F135] text-xs font-medium uppercase tracking-wide">Campus research office</p>
           <h2 className="text-3xl font-semibold mt-3 leading-tight">From grant to UC — compliant by design.</h2>
           <p className="text-white/70 mt-4 text-sm leading-6">
-            ShodhFund is purpose-built for Indian universities: GFR rules, agency formats, and utilization certificates without the paperwork pile.
+            Live demo: login hits the Express API, expenses persist in a local JSON database, finance can approve or reject, and UCs are drafted from approved vouchers.
           </p>
-          <div className="mt-10 grid grid-cols-2 gap-4">
-            {[
-              ["4 roles", "PI · Finance · Admin · Auditor"],
-              ["GFR 12-A", "UC auto-generated"],
-              ["8 AI tools", "OCR to anomaly detection"],
-              ["99.8%", "compliance on demo data"],
-            ].map(([a, b]) => (
-              <div key={a} className="border border-white/10 rounded-xl p-4">
-                <div className="font-semibold">{a}</div>
-                <div className="text-xs text-white/50 mt-1">{b}</div>
-              </div>
-            ))}
-          </div>
         </div>
       </div>
     </div>

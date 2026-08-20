@@ -1,9 +1,13 @@
 "use client";
 import { AppShell, Stat, StatusChip } from "@/components/AppShell";
-import { expenses, grants, inr } from "@/lib/data";
 import { AddExpense } from "@/components/AddExpense";
+import { useList } from "@/lib/useList";
+import { inr, type Expense, type Grant } from "@/lib/types";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 import Link from "next/link";
+import { useEffect, useState } from "react";
+import { api } from "@/lib/api";
+import { getUser } from "@/lib/session";
 
 const trend = [
   { m: "Jan", u: 42 }, { m: "Feb", u: 48 }, { m: "Mar", u: 51 }, { m: "Apr", u: 55 },
@@ -11,22 +15,32 @@ const trend = [
 ];
 
 export default function PIDashboard() {
-  const mine = grants.filter((g) => g.pi === "Dr. Arjun Sharma");
+  const [userId, setUserId] = useState<string | null>(null);
+  useEffect(() => setUserId(getUser()?.id || "u-pi"), []);
+  const grants = useList<Grant>(userId ? `/api/grants?piId=${userId}` : "/api/grants");
+  const expenses = useList<Expense>("/api/expenses");
+  const [stats, setStats] = useState({ grants: 0, sanctioned: 0, spent: 0, utilization: 0 });
+  useEffect(() => {
+    if (!userId) return;
+    api<typeof stats>(`/api/stats?role=PI&userId=${userId}`).then(setStats).catch(() => {});
+  }, [userId, expenses.data.length]);
+
   return (
     <AppShell role="PI">
       <div className="flex items-start justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Welcome back, Dr. Arjun!</h1>
-          <p className="text-sm text-ink-2 mt-1">3 active grants · next UC due 31 Aug 2026</p>
+          <h1 className="text-2xl font-semibold tracking-tight">Welcome back, {getUser()?.name?.split(" ")[1] || "PI"}!</h1>
+          <p className="text-sm text-ink-2 mt-1">Live data from backend · JSON store</p>
         </div>
-        <AddExpense />
+        <AddExpense onCreated={() => expenses.reload()} />
       </div>
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <Stat label="Active Grants" value="5" />
-        <Stat label="Total Sanctioned" value="₹2.45 Cr" />
-        <Stat label="Total Spent" value="₹1.67 Cr" />
-        <Stat label="Utilization" value="68.2%" />
+        <Stat label="Active Grants" value={String(stats.grants)} />
+        <Stat label="Total Sanctioned" value={inr(stats.sanctioned)} />
+        <Stat label="Total Spent" value={inr(stats.spent)} />
+        <Stat label="Utilization" value={`${stats.utilization}%`} />
       </div>
+      {grants.error && <p className="text-sm text-danger mt-3">API: {grants.error} — start backend on port 4000.</p>}
       <div className="grid lg:grid-cols-2 gap-4 mt-4">
         <div className="card p-5">
           <div className="flex justify-between mb-3">
@@ -34,11 +48,9 @@ export default function PIDashboard() {
             <Link href="/dashboard/pi/grants" className="text-xs text-info">View all</Link>
           </div>
           <table className="w-full text-[13px]">
-            <thead className="text-muted text-left">
-              <tr><th className="pb-2">Grant</th><th>Agency</th><th>UC due</th></tr>
-            </thead>
+            <thead className="text-muted text-left"><tr><th className="pb-2">Grant</th><th>Agency</th><th>UC due</th></tr></thead>
             <tbody>
-              {mine.map((g) => (
+              {grants.data.map((g) => (
                 <tr key={g.id} className="border-t border-border">
                   <td className="py-3">
                     <Link href={`/grants/${g.id}`} className="font-medium hover:underline">{g.title}</Link>
@@ -54,7 +66,7 @@ export default function PIDashboard() {
         <div className="card p-5">
           <h3 className="font-medium mb-3">Recent Expenses</h3>
           <div className="space-y-3">
-            {expenses.slice(0, 5).map((e) => (
+            {expenses.data.slice(0, 5).map((e) => (
               <div key={e.id} className="flex items-center justify-between text-[13px]">
                 <div>
                   <div className="font-medium">{e.vendor}</div>
@@ -84,7 +96,7 @@ export default function PIDashboard() {
         </div>
         <div className="card p-5">
           <h3 className="font-medium mb-3">Upcoming UCs</h3>
-          {mine.slice(0, 2).map((g) => (
+          {grants.data.slice(0, 3).map((g) => (
             <div key={g.id} className="flex justify-between py-3 border-b border-border text-[13px]">
               <div>
                 <div className="font-medium">{g.agency}</div>
@@ -97,13 +109,6 @@ export default function PIDashboard() {
             </div>
           ))}
         </div>
-      </div>
-      <div className="card p-5 mt-4 flex items-center justify-between gap-4">
-        <div>
-          <div className="text-xs font-medium text-pi">AI Insights</div>
-          <p className="text-sm mt-1">Based on your spending pattern, you might save up to ₹5.2 Lakhs by better budget planning.</p>
-        </div>
-        <button className="btn-black shrink-0">View AI Insights</button>
       </div>
     </AppShell>
   );
