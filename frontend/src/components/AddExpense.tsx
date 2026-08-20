@@ -9,8 +9,9 @@ export function AddExpense({ onCreated }: { onCreated?: () => void }) {
   const [open, setOpen] = useState(false);
   const [grants, setGrants] = useState<Grant[]>([]);
   const [loading, setLoading] = useState(false);
-  const [extracted, setExtracted] = useState(false);
+  const [extracted, setExtracted] = useState("");
   const [toast, setToast] = useState("");
+  const [fileName, setFileName] = useState("");
   const [form, setForm] = useState({
     grantId: "",
     head: "Equipment",
@@ -29,23 +30,26 @@ export function AddExpense({ onCreated }: { onCreated?: () => void }) {
     }).catch(() => {});
   }, []);
 
-  async function runOcr() {
+  async function runOcr(file?: File) {
     setLoading(true);
     try {
-      const data = await api<{
-        vendor: string; invoice: string; amount: string; date: string; gst: string; desc: string; head: string;
-      }>("/api/ocr/extract", { method: "POST", body: JSON.stringify({ hint: "equipment" }) });
+      const fd = new FormData();
+      if (file) fd.append("file", file);
+      fd.append("hint", file?.name || fileName || "equipment");
+      fd.append("filename", file?.name || fileName || "");
+      const res = await fetch("/api/ocr/extract", { method: "POST", body: fd });
+      const data = await res.json();
       setForm((f) => ({
         ...f,
-        vendor: data.vendor,
-        invoice: data.invoice,
-        amount: data.amount,
-        date: data.date,
-        gst: data.gst,
-        description: data.desc,
-        head: data.head,
+        vendor: data.vendor || f.vendor,
+        invoice: data.invoice || f.invoice,
+        amount: data.amount || f.amount,
+        date: data.date || f.date,
+        gst: data.gst || f.gst,
+        description: data.desc || f.description,
+        head: data.head || f.head,
       }));
-      setExtracted(true);
+      setExtracted(data.notes || "Extracted");
     } finally {
       setLoading(false);
     }
@@ -59,26 +63,39 @@ export function AddExpense({ onCreated }: { onCreated?: () => void }) {
         <div className="fixed inset-0 z-40 bg-black/40 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl w-full max-w-[720px] shadow-[0_10px_30px_rgba(10,37,64,0.12)]">
             <div className="flex items-center justify-between px-5 py-4 border-b border-border">
-              <h2 className="font-semibold">Add Expense · AI OCR</h2>
+              <h2 className="font-semibold">Add Expense · Bill OCR</h2>
               <button onClick={() => setOpen(false)}><X className="w-4 h-4" /></button>
             </div>
             <div className="grid md:grid-cols-2 gap-0">
               <div className="p-5 border-r border-border">
-                <button
-                  onClick={runOcr}
-                  className="w-full h-48 border-2 border-dashed border-border rounded-xl flex flex-col items-center justify-center text-sm text-muted hover:bg-surface"
-                >
-                  {loading ? "Extracting bill fields…" : extracted ? (
+                <label className="w-full h-48 border-2 border-dashed border-border rounded-xl flex flex-col items-center justify-center text-sm text-muted hover:bg-surface cursor-pointer">
+                  <input
+                    type="file"
+                    accept=".pdf,.png,.jpg,.jpeg"
+                    className="hidden"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (!f) return;
+                      setFileName(f.name);
+                      runOcr(f);
+                    }}
+                  />
+                  {loading ? "Reading bill…" : extracted ? (
                     <>
                       <ScanLine className="w-6 h-6 text-success mb-2" />
-                      <span className="text-ink">bill extracted</span>
+                      <span className="text-ink px-4 text-center">{fileName || "bill"}</span>
+                      <span className="text-[11px] mt-1 px-4 text-center">{extracted}</span>
                     </>
                   ) : (
                     <>
                       <Upload className="w-6 h-6 mb-2" />
-                      Click to run demo OCR
+                      Drop / choose PDF or image
+                      <span className="text-[11px] mt-1">Name file travel / consumable / duplicate to demo OCR</span>
                     </>
                   )}
+                </label>
+                <button type="button" className="btn-outline w-full justify-center mt-3 text-sm" onClick={() => runOcr()}>
+                  Run OCR without file
                 </button>
               </div>
               <div className="p-5 space-y-3">

@@ -1,6 +1,17 @@
 import express from "express";
 import cors from "cors";
+import path from "node:path";
+import fs from "node:fs";
+import { fileURLToPath } from "node:url";
+import multer from "multer";
 import { db, mutate, nextId } from "./store.js";
+import { extractBill } from "./ocr.js";
+import { ucPdfBuffer } from "./pdf.js";
+
+const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
+const uploadDir = path.join(root, "uploads");
+fs.mkdirSync(uploadDir, { recursive: true });
+const upload = multer({ dest: uploadDir, limits: { fileSize: 8 * 1024 * 1024 } });
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -228,6 +239,57 @@ app.get("/api/notifications", (req, res) => {
   res.json(list);
 });
 
+app.post("/api/notifications/:id/read", (req, res) => {
+  const row = mutate((data) => {
+    const n = data.notifications.find((x) => x.id === req.params.id);
+    if (n) n.read = true;
+    return n;
+  });
+  if (!row) return res.status(404).json({ error: "Not found" });
+  res.json(row);
+});
+
+app.patch("/api/budget-heads/:id", (req, res) => {
+  const allocated = Number(req.body?.allocated);
+  const row = mutate((data) => {
+    const b = data.budgetHeads.find((x) => x.id === req.params.id);
+    if (!b) return null;
+    if (!Number.isNaN(allocated) && allocated >= 0) b.allocated = allocated;
+    log(data, req.body?.userId || "u-fin", "UPDATE_BUDGET", "BudgetHead", b.id, { allocated: b.allocated });
+    return b;
+  });
+  if (!row) return res.status(404).json({ error: "Not found" });
+  res.json(row);
+});
+
+app.get("/api/search", (req, res) => {
+  const q = String(req.query.q || "").toLowerCase().trim();
+  const data = db();
+  if (!q) return res.json({ grants: [], expenses: [] });
+  const grants = data.grants.filter((g) =>
+    `${g.id} ${g.title} ${g.agency} ${g.pi}`.toLowerCase().includes(q)
+  );
+  const expenses = data.expenses.filter((e) =>
+    `${e.id} ${e.vendor} ${e.invoice} ${e.grantId}`.toLowerCase().includes(q)
+  );
+  res.json({ grants, expenses });
+});
+
+app.get("/api/export/expenses.csv", (req, res) => {
+  const data = db();
+  let list = data.expenses;
+  if (req.query.grantId) list = list.filter((e) => e.grantId === req.query.grantId);
+  const header = "id,grantId,vendor,invoice,amount,date,head,status,compliance,gst";
+  const lines = list.map((e) =>
+    [e.id, e.grantId, e.vendor, e.invoice, e.amount, e.date, e.head, e.status, e.compliance, e.gst]
+      .map((v) => `"${String(v ?? "").replaceAll('"', '""')}"`)
+      .join(",")
+  );
+  res.setHeader("Content-Type", "text/csv");
+  res.setHeader("Content-Disposition", "attachment; filename=shodhfund-expenses.csv");
+  res.send([header, ...lines].join("\n"));
+});
+
 app.get("/api/milestones", (req, res) => {
   const data = db();
   let list = data.milestones;
@@ -239,39 +301,17 @@ app.get("/api/audit-logs", (_req, res) => res.json(db().auditLogs.slice(0, 80)))
 app.get("/api/objections", (_req, res) => res.json(db().objections));
 app.get("/api/approvals", (_req, res) => res.json(db().approvals));
 
-app.post("/api/ocr/extract", (req, res) => {
-  const hint = String(req.body?.filename || req.body?.hint || "equipment").toLowerCase();
-  const packs = {
-    travel: {
-      vendor: "MakeMyTrip Business",
-      invoice: `MMT-B2B-${Math.floor(9000 + Math.random() * 900)}`,
-      amount: "48200",
-      date: "2026-07-08",
-      gst: "07AADCM5146R1ZV",
-      desc: "Air + hotel — conference travel",
-      head: "Travel",
-    },
-    consumable: {
-      vendor: "Sigma-Aldrich",
-      invoice: `SA-IN-${Math.floor(10000 + Math.random() * 900)}`,
-      amount: "91200",
-      date: "2026-07-02",
-      gst: "27AABCS1234A1Z9",
-      desc: "Laboratory consumables",
-      head: "Consumables",
-    },
-  };
-  const data =
-    hint.includes("travel") ? packs.travel : hint.includes("consum") ? packs.consumable : {
-      vendor: "Thermo Fisher Scientific",
-      invoice: "TFS/DEL/88421",
-      amount: "428500",
-      date: "2026-07-12",
-      gst: "07AABCT3518Q1Z4",
-      desc: "QuantStudio 5 Real-Time PCR System — kit lot",
-      head: "Equipment",
-    };
-  res.json({ ...data, compliance: "PENDING", notes: "Extracted locally (demo OCR). Submit to run GFR checks." });
+app.post("/api/ocr/extract", upload.single("file"), async (req, res) => {
+  try {
+    const filename = req.file?.originalname || req.body?.filename || "";
+    const hint = req.body?.hint || filename;
+    let buffer;
+    if (req.file?.path) buffer = fs.readFileSync(req.file.path);
+    const extracted = await extractBill({ filename, hint, buffer });
+    res.json({ ...extracted, compliance: "PENDING" });
+  } catch (e) {
+    res.status(500).json({ error: e.message || "OCR failed" });
+  }
 });
 
 app.post("/api/uc/generate", (req, res) => {

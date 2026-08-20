@@ -32,14 +32,15 @@ Har phase **alag commit**. Pehle local pe kaam, phir `git add` / `git commit` / 
 
 **Commit idea:** `feat: working Phase 1 prototype with API and role dashboards`
 
-### Phase 2 — Real files & AI
+### Phase 2 — Files, PDF, search (HO GAYA)
 
-- Bill PDF upload (multer / disk)
-- Gemini OCR (`GEMINI_API_KEY`) — `backend/src/ocr.js`
-- UC PDF download (`@react-pdf/renderer` ya `pdfkit`)
-- Email-less notifications already in DB — add mark-as-read
+- [x] Bill upload + demo OCR (`ocr.js`; Gemini if `GEMINI_API_KEY`)
+- [x] UC PDF download (`pdfkit`)
+- [x] Mark notification read
+- [x] Budget allocation edit
+- [x] Expense CSV export + grant search
 
-**Commit:** `feat: Gemini OCR and UC PDF export`
+**Commit:** `feat: bill OCR upload, UC PDF, budget edit and CSV export`
 
 ### Phase 3 — Auth & Postgres
 

@@ -83,6 +83,9 @@ export default function UCPage() {
               <div className="mt-8 p-3 bg-white border border-border rounded-lg text-xs">
                 <b>AI summary:</b> {uc.summary} Utilization {uc.utilizationPct}%.
               </div>
+              <a className="btn-black mt-6 inline-flex" href={`/api/uc/${uc.id}/pdf`} target="_blank" rel="noreferrer">
+                Download PDF
+              </a>
             </article>
           )}
         </div>
