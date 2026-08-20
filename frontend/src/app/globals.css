@@ -1,0 +1,107 @@
+@import "tailwindcss";
+
+@theme inline {
+  --color-bg: #ffffff;
+  --color-surface: #f6f9fc;
+  --color-surface-2: #f0f4f8;
+  --color-border: #e6ebf1;
+  --color-border-strong: #d7dee8;
+  --color-ink: #0a2540;
+  --color-ink-2: #425466;
+  --color-muted: #697386;
+  --color-black: #0a0a0a;
+  --color-black-2: #111111;
+  --color-lime: #c8f135;
+  --color-lime-hover: #b6e012;
+  --color-success: #0d9488;
+  --color-warning: #d97706;
+  --color-danger: #e11d48;
+  --color-info: #2563eb;
+  --color-pi: #1e40af;
+  --color-finance: #0f766e;
+  --color-admin: #6d28d9;
+  --color-auditor: #c2410c;
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  background: #fff;
+  color: #0a2540;
+  font-family: var(--font-geist-sans), Inter, system-ui, sans-serif;
+}
+
+.tabular { font-variant-numeric: tabular-nums; }
+
+.card {
+  background: #fff;
+  border: 1px solid #e6ebf1;
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(10, 37, 64, 0.06);
+}
+
+.btn-lime {
+  background: #c8f135;
+  color: #0a0a0a;
+  border-radius: 8px;
+  font-weight: 500;
+  padding: 10px 16px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: none;
+  cursor: pointer;
+}
+.btn-lime:hover { background: #b6e012; }
+
+.btn-black {
+  background: #111111;
+  color: #fff;
+  border-radius: 8px;
+  font-weight: 500;
+  padding: 10px 16px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: none;
+  cursor: pointer;
+}
+
+.btn-outline {
+  background: #fff;
+  color: #0a2540;
+  border: 1px solid #0a0a0a;
+  border-radius: 8px;
+  font-weight: 500;
+  padding: 10px 16px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.badge {
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+}
+
+input, select, textarea {
+  border: 1px solid #e6ebf1;
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 14px;
+  width: 100%;
+  outline: none;
+  background: #fff;
+  color: #0a2540;
+}
+input:focus, select:focus, textarea:focus {
+  border-color: #1e40af;
+  box-shadow: 0 0 0 3px rgba(30, 64, 175, 0.12);
+}
