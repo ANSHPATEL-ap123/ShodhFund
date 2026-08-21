@@ -10,6 +10,8 @@ async function proxy(req: NextRequest, ctx: { params: Promise<{ path: string[] }
     const headers = new Headers();
     const ct = req.headers.get("content-type");
     if (ct) headers.set("content-type", ct);
+    const auth = req.headers.get("authorization");
+    if (auth) headers.set("authorization", auth);
     const init: RequestInit = { method: req.method, headers, redirect: "manual" };
     if (req.method !== "GET" && req.method !== "HEAD") {
       init.body = Buffer.from(await req.arrayBuffer());

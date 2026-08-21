@@ -11,11 +11,24 @@ const KEYS = [
   "notifications", "approvals", "auditLogs", "ucs", "milestones", "objections",
 ];
 
+function dedupe(list) {
+  const seen = new Set();
+  const out = [];
+  for (const row of list) {
+    const id = row?.id;
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    out.push(row);
+  }
+  return out;
+}
+
 function merge(raw) {
   const base = seed();
   if (!raw || typeof raw !== "object") return base;
   for (const k of KEYS) {
     if (!Array.isArray(raw[k])) raw[k] = base[k];
+    else raw[k] = dedupe(raw[k]);
   }
   return raw;
 }
@@ -57,8 +70,11 @@ export function mutate(fn) {
 export function nextId(prefix, list) {
   const arr = Array.isArray(list) ? list : [];
   const nums = arr
-    .map((x) => Number(String(x?.id ?? "").replace(/\\D/g, "")))
-    .filter((n) => !Number.isNaN(n));
+    .map((x) => Number(String(x?.id ?? "").replace(/\D/g, "")))
+    .filter((n) => Number.isFinite(n) && n > 0);
   const max = nums.length ? Math.max(...nums) : 1000;
-  return prefix + "-" + (max + 1);
+  let n = max + 1;
+  const ids = new Set(arr.map((x) => x?.id));
+  while (ids.has(`${prefix}-${n}`)) n += 1;
+  return `${prefix}-${n}`;
 }

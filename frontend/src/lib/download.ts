@@ -1,5 +1,10 @@
+import { getToken } from "./session";
+
 export async function downloadFile(url: string, filename: string) {
-  const res = await fetch(url);
+  const token = getToken();
+  const headers: Record<string, string> = {};
+  if (token) headers.Authorization = `Bearer ${token}`;
+  const res = await fetch(url, { headers });
   if (!res.ok) {
     let msg = `Download failed (${res.status})`;
     try {

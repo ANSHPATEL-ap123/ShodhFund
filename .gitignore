@@ -8,5 +8,6 @@ backend/node_modules
 frontend/.next
 backend/data/db.json
 backend/uploads
+backend/.env
 backend/data/db.json
 

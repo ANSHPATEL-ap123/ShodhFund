@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "node --watch src/server.js",
     "dev:json": "node --watch src/server.js",
-    "start": "node src/server-v2.js",
+    "start": "node src/server.js",
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
     "db:seed": "npx tsx prisma/seed.ts",

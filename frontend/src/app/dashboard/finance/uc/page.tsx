@@ -20,8 +20,8 @@ export default function P() {
           </thead>
           <tbody>
             {data.length === 0 && <tr><td className="px-4 py-6 text-muted" colSpan={6}>No UCs yet. Generate from PI → Utilization Cert.</td></tr>}
-            {data.map((u) => (
-              <tr key={u.id} className="border-t border-border">
+            {data.map((u, i) => (
+              <tr key={`${u.id}-${i}`} className="border-t border-border">
                 <td className="px-4 py-2 font-mono text-xs">{u.id}</td>
                 <td className="px-4 py-2 font-mono text-xs">{u.grantId}</td>
                 <td className="px-4 py-2">{u.financialYear}</td>
