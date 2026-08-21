@@ -6,17 +6,41 @@ import { seed } from "./seed.js";
 const dir = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "data");
 const file = path.join(dir, "db.json");
 
-function load() {
-  if (!fs.existsSync(file)) {
-    fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(file, JSON.stringify(seed(), null, 2));
+const KEYS = [
+  "users", "grants", "budgetHeads", "expenses", "anomalies",
+  "notifications", "approvals", "auditLogs", "ucs", "milestones", "objections",
+];
+
+function merge(raw) {
+  const base = seed();
+  if (!raw || typeof raw !== "object") return base;
+  for (const k of KEYS) {
+    if (!Array.isArray(raw[k])) raw[k] = base[k];
   }
-  return JSON.parse(fs.readFileSync(file, "utf8"));
+  return raw;
 }
 
-function save(db) {
+function load() {
+  try {
+    if (!fs.existsSync(file)) {
+      fs.mkdirSync(dir, { recursive: true });
+      const fresh = seed();
+      fs.writeFileSync(file, JSON.stringify(fresh, null, 2));
+      return fresh;
+    }
+    const parsed = JSON.parse(fs.readFileSync(file, "utf8") || "{}");
+    return merge(parsed);
+  } catch {
+    const fresh = seed();
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(file, JSON.stringify(fresh, null, 2));
+    return fresh;
+  }
+}
+
+function save(data) {
   fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(file, JSON.stringify(db, null, 2));
+  fs.writeFileSync(file, JSON.stringify(data, null, 2));
 }
 
 export function db() {
@@ -31,8 +55,10 @@ export function mutate(fn) {
 }
 
 export function nextId(prefix, list) {
-  const nums = list
-    .map((x) => Number(String(x.id).replace(/\D/g, "")))
+  const arr = Array.isArray(list) ? list : [];
+  const nums = arr
+    .map((x) => Number(String(x?.id ?? "").replace(/\D/g, "")))
     .filter((n) => !Number.isNaN(n));
-  return `${prefix}-${Math.max(1000, ...nums, 1000) + 1}`;
+  const max = nums.length ? Math.max(...nums) : 1000;
+  return `${prefix}-${max + 1}`;
 }

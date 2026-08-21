@@ -348,6 +348,47 @@ app.post("/api/uc/generate", (req, res) => {
 
 app.get("/api/ucs", (_req, res) => res.json(db().ucs));
 
+app.post("/api/ucs/:id/status", (req, res) => {
+  const status = String(req.body?.status || "").toUpperCase();
+  const allowed = ["DRAFT", "UNDER_REVIEW", "APPROVED", "SUBMITTED_TO_AGENCY"];
+  if (!allowed.includes(status)) return res.status(400).json({ error: "Bad status" });
+  const row = mutate((data) => {
+    const u = data.ucs.find((x) => x.id === req.params.id);
+    if (!u) return null;
+    u.status = status;
+    log(data, req.body?.userId || "u-fin", "UC_STATUS", "UC", u.id, { status });
+    return u;
+  });
+  if (!row) return res.status(404).json({ error: "Not found" });
+  res.json(row);
+});
+
+app.get("/api/uc/:id/pdf", async (req, res) => {
+  try {
+    const data = db();
+    const uc = data.ucs.find((x) => x.id === req.params.id);
+    if (!uc) return res.status(404).json({ error: "Generate a UC first, then download PDF." });
+    const grant = data.grants.find((g) => g.id === uc.grantId);
+    if (!grant) return res.status(404).json({ error: "Grant missing" });
+    const buf = await ucPdfBuffer({
+      grant,
+      uc,
+      heads: uc.heads || data.budgetHeads.filter((b) => b.grantId === uc.grantId),
+    });
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename="${uc.id}.pdf"`);
+    res.end(buf);
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message || "PDF failed. Run npm install in backend (pdfkit)." });
+  }
+});
+
+app.use((err, _req, res, _next) => {
+  console.error(err);
+  res.status(500).json({ error: err?.message || "Server error" });
+});
+
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`ShodhFund API http://localhost:${PORT}`);
 });

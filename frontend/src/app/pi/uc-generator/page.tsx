@@ -5,6 +5,7 @@ import { useList } from "@/lib/useList";
 import { getUser } from "@/lib/session";
 import { inr, type Grant } from "@/lib/types";
 import { useState } from "react";
+import { downloadFile } from "@/lib/download";
 
 type UC = {
   id: string;
@@ -23,6 +24,7 @@ export default function UCPage() {
   const [grantId, setGrantId] = useState("");
   const [uc, setUc] = useState<UC | null>(null);
   const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
   const gId = grantId || grants.data[0]?.id || "";
 
   return (
@@ -83,9 +85,20 @@ export default function UCPage() {
               <div className="mt-8 p-3 bg-white border border-border rounded-lg text-xs">
                 <b>AI summary:</b> {uc.summary} Utilization {uc.utilizationPct}%.
               </div>
-              <a className="btn-black mt-6 inline-flex" href={`/api/uc/${uc.id}/pdf`} target="_blank" rel="noreferrer">
+              {err && <p className="text-danger text-sm mt-3">{err}</p>}
+              <button
+                className="btn-black mt-6"
+                onClick={async () => {
+                  setErr("");
+                  try {
+                    await downloadFile(`/api/uc/${uc.id}/pdf`, `${uc.id}.pdf`);
+                  } catch (e) {
+                    setErr(e instanceof Error ? e.message : "PDF failed");
+                  }
+                }}
+              >
                 Download PDF
-              </a>
+              </button>
             </article>
           )}
         </div>
