@@ -1,15 +1,13 @@
 # ShodhFund
 
-Research Funding, Simplified. SIH 2026 — USICT013.
-
-Working Phase 1 prototype: GFR-aware grant expenses, finance approval, UC drafts.
+AI-assisted, GFR-aware research grant lifecycle for Indian universities.  
+SIH 2026 · USICT013 · **Phase 3 product slice** (JSON demo store + JWT).
 
 ```
-shodhfund/
-├── frontend/     Next.js  → http://localhost:3000
-├── backend/      Express  → http://localhost:4000
-├── INSTALL.md    laptop setup
-└── GUIDE.md      phases + GitHub push
+frontend/   Next.js 15  → http://localhost:3000
+backend/    Express     → http://localhost:4000
+demo-bills/ OCR sample PDFs
+HANDOFF.md  what to build next
 ```
 
 ```bat
@@ -17,4 +15,10 @@ cd backend && npm install && npm run dev
 cd frontend && npm install && npm run dev
 ```
 
-Password for all demo users: `demo1234`
+Demo password: `demo1234`  
+PI `arjun.sharma@university.edu`
+
+### Working product
+Login (JWT) · 4 roles · expenses + OCR · finance approve · UC PDF · CSV · Ask NL query · register grant · calendar · anomalies · audit trail
+
+Optional `backend/.env`: `JWT_SECRET`, `GEMINI_API_KEY`, R2, later `DATABASE_URL` (Prisma schema in `backend/prisma/`).

@@ -7,7 +7,8 @@ import { getUser, logout, viewRole } from "@/lib/session";
 import type { Role, User } from "@/lib/types";
 import {
   LayoutDashboard, FolderKanban, Receipt, FileText, Flag, Bell, HelpCircle,
-  ShieldCheck, PieChart, Building2, ClipboardList, History, AlertTriangle, Wallet, BookOpen, LogOut
+  ShieldCheck, PieChart, Building2, ClipboardList, History, AlertTriangle, Wallet, BookOpen, LogOut,
+  MessageSquare, CalendarDays
 } from "lucide-react";
 
 const nav: Record<Role, { href: string; label: string; icon: typeof LayoutDashboard }[]> = {
@@ -16,6 +17,8 @@ const nav: Record<Role, { href: string; label: string; icon: typeof LayoutDashbo
     { href: "/dashboard/pi/grants", label: "My Grants", icon: FolderKanban },
     { href: "/dashboard/pi/expenses", label: "Expenses", icon: Receipt },
     { href: "/pi/uc-generator", label: "Utilization Cert.", icon: FileText },
+    { href: "/dashboard/pi/calendar", label: "Calendar", icon: CalendarDays },
+    { href: "/dashboard/pi/ask", label: "Ask", icon: MessageSquare },
     { href: "/dashboard/pi/milestones", label: "Milestones", icon: Flag },
     { href: "/dashboard/pi/reports", label: "Reports", icon: PieChart },
     { href: "/dashboard/pi/notifications", label: "Notifications", icon: Bell },
@@ -50,6 +53,7 @@ export function AppShell({ role, children }: { role: Role; children: React.React
   const pathname = usePathname();
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
+  const [unread, setUnread] = useState(0);
   const color = accent[role];
   const items = nav[role];
 
@@ -60,6 +64,10 @@ export function AppShell({ role, children }: { role: Role; children: React.React
       return;
     }
     setUser(u);
+    fetch(`/api/notifications?userId=${u.id}`)
+      .then((r) => r.json())
+      .then((rows: { read?: boolean }[]) => setUnread(Array.isArray(rows) ? rows.filter((n) => !n.read).length : 0))
+      .catch(() => {});
   }, [router]);
 
   return (
@@ -104,7 +112,14 @@ export function AppShell({ role, children }: { role: Role; children: React.React
           <div className="text-sm text-muted">Viewing as {role}{user && viewRole() !== user.role ? " (demo switch)" : ""}</div>
           <div className="flex items-center gap-3">
             <span className="badge text-white" style={{ background: color }}>{role}</span>
-            <Bell className="w-4 h-4 text-muted" />
+            <Link href={role === "PI" ? "/dashboard/pi/notifications" : "/dashboard/finance/anomalies"} className="relative">
+              <Bell className="w-4 h-4 text-muted" />
+              {unread > 0 && (
+                <span className="absolute -top-1 -right-1 min-w-[14px] h-[14px] px-0.5 rounded-full bg-[#C8F135] text-[9px] font-semibold text-black flex items-center justify-center">
+                  {unread}
+                </span>
+              )}
+            </Link>
             <div className="w-8 h-8 rounded-full bg-black text-white text-xs flex items-center justify-center">
               {(user?.name || "U").split(" ").slice(-1)[0][0]}
             </div>
