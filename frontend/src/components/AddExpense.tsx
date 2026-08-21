@@ -90,7 +90,14 @@ export function AddExpense({ onCreated }: { onCreated?: () => void }) {
                     <>
                       <Upload className="w-6 h-6 mb-2" />
                       Drop / choose PDF or image
-                      <span className="text-[11px] mt-1">Name file travel / consumable / duplicate to demo OCR</span>
+                      <span className="text-[11px] mt-2 px-4 text-center">
+                        Demo bills:{" "}
+                        <a className="text-info underline" href="/demo-bills/travel.pdf" download>travel.pdf</a>
+                        {" · "}
+                        <a className="text-info underline" href="/demo-bills/duplicate.pdf" download>duplicate.pdf</a>
+                        {" · "}
+                        <a className="text-info underline" href="/demo-bills/equipment.pdf" download>equipment.pdf</a>
+                      </span>
                     </>
                   )}
                 </label>

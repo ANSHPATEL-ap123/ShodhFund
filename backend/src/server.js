@@ -1,3 +1,4 @@
+import "dotenv/config";
 import express from "express";
 import cors from "cors";
 import path from "node:path";
@@ -7,6 +8,8 @@ import multer from "multer";
 import { db, mutate, nextId } from "./store.js";
 import { extractBill } from "./ocr.js";
 import { ucPdfBuffer } from "./pdf.js";
+import { signToken, optionalAuth, authMiddleware } from "./auth.js";
+import { saveBill } from "./storage.js";
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const uploadDir = path.join(root, "uploads");
@@ -18,6 +21,8 @@ const PORT = process.env.PORT || 4000;
 
 app.use(cors({ origin: true }));
 app.use(express.json({ limit: "2mb" }));
+app.use("/uploads", express.static(uploadDir));
+app.use(optionalAuth);
 
 function publicUser(u) {
   if (!u) return null;
@@ -87,7 +92,8 @@ app.post("/api/auth/login", (req, res) => {
   if (!user || user.password !== password) {
     return res.status(401).json({ error: "Invalid email or password. Demo password is demo1234." });
   }
-res.json({ token: `demo.${user.id}`, user: publicUser(user) });
+  const token = signToken({ id: user.id, email: user.email, role: user.role });
+  res.json({ token, user: publicUser(user) });
 });
 
 app.get("/api/users", (_req, res) => res.json(db().users.map(publicUser)));
@@ -144,7 +150,7 @@ app.get("/api/expenses", (req, res) => {
   res.json(list);
 });
 
-app.post("/api/expenses", (req, res) => {
+app.post("/api/expenses", authMiddleware, (req, res) => {
   const body = req.body || {};
   const row = mutate((data) => {
     const exp = {
@@ -158,7 +164,7 @@ app.post("/api/expenses", (req, res) => {
       gst: body.gst || "",
       description: body.description || body.desc || "",
       status: "SUBMITTED",
-      submittedById: body.submittedById || "u-pi",
+      submittedById: req.user?.id || body.submittedById || "u-pi",
     };
     const c = checkCompliance(exp, data);
     exp.compliance = c.status;
@@ -187,7 +193,7 @@ app.post("/api/expenses", (req, res) => {
   res.status(201).json(row);
 });
 
-app.post("/api/expenses/:id/decide", (req, res) => {
+app.post("/api/expenses/:id/decide", authMiddleware, (req, res) => {
   const action = String(req.body?.action || "").toUpperCase();
   const reason = req.body?.reason || "";
   const approverId = req.body?.approverId || "u-fin";
@@ -307,14 +313,16 @@ app.post("/api/ocr/extract", upload.single("file"), async (req, res) => {
     const hint = req.body?.hint || filename;
     let buffer;
     if (req.file?.path) buffer = fs.readFileSync(req.file.path);
+    let stored = null;
+    if (buffer) stored = await saveBill({ buffer, filename, mime: req.file?.mimetype });
     const extracted = await extractBill({ filename, hint, buffer });
-    res.json({ ...extracted, compliance: "PENDING" });
+    res.json({ ...extracted, compliance: "PENDING", billUrl: stored?.url || null, storage: stored?.storage || null });
   } catch (e) {
     res.status(500).json({ error: e.message || "OCR failed" });
   }
 });
 
-app.post("/api/uc/generate", (req, res) => {
+app.post("/api/uc/generate", authMiddleware, (req, res) => {
   const data = db();
   const grantId = req.body?.grantId || data.grants[0].id;
   const g = data.grants.find((x) => x.id === grantId) || data.grants[0];
