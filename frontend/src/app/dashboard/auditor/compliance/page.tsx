@@ -8,6 +8,9 @@ export default function P() {
     <AppShell role="AUDITOR">
       <h1 className="text-2xl font-semibold mb-4">Compliance Review</h1>
       <div className="card overflow-hidden">
+        {data.length === 0 ? (
+          <p className="p-6 text-sm text-ink-2">No expenses to review.</p>
+        ) : (
         <table className="w-full text-[13px]">
           <thead className="bg-surface text-muted text-left">
             <tr>{["Expense", "Vendor", "Amount", "GFR"].map((h) => <th key={h} className="px-4 py-3">{h}</th>)}</tr>
@@ -23,6 +26,7 @@ export default function P() {
             ))}
           </tbody>
         </table>
+        )}
       </div>
     </AppShell>
   );
