@@ -87,7 +87,7 @@ app.post("/api/auth/login", (req, res) => {
   if (!user || user.password !== password) {
     return res.status(401).json({ error: "Invalid email or password. Demo password is demo1234." });
   }
-  res.json({ token: `demo.${user.id}`, user: publicUser(user) });
+res.json({ token: `demo.${user.id}`, user: publicUser(user) });
 });
 
 app.get("/api/users", (_req, res) => res.json(db().users.map(publicUser)));

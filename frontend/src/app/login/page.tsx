@@ -27,11 +27,11 @@ export default function LoginPage() {
               setBusy(true);
               setError("");
               try {
-                const res = await api<{ user: User }>("/api/auth/login", {
+               const res = await api<{ token: string; user: User }>("/api/auth/login", {
                   method: "POST",
                   body: JSON.stringify({ email, password }),
                 });
-                saveUser(res.user);
+                saveUser(res.user, res.token);
                 router.push("/select-role");
               } catch (err) {
                 setError(err instanceof Error ? err.message : "Login failed");
