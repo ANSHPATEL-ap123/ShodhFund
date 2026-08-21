@@ -57,8 +57,8 @@ export function mutate(fn) {
 export function nextId(prefix, list) {
   const arr = Array.isArray(list) ? list : [];
   const nums = arr
-    .map((x) => Number(String(x?.id ?? "").replace(/\D/g, "")))
+    .map((x) => Number(String(x?.id ?? "").replace(/\\D/g, "")))
     .filter((n) => !Number.isNaN(n));
   const max = nums.length ? Math.max(...nums) : 1000;
-  return `${prefix}-${max + 1}`;
+  return prefix + "-" + (max + 1);
 }
