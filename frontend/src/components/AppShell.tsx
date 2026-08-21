@@ -37,6 +37,7 @@ const nav: Record<Role, { href: string; label: string; icon: typeof LayoutDashbo
     { href: "/dashboard/admin/departments", label: "Departments", icon: Building2 },
     { href: "/dashboard/admin/nirf", label: "NIRF Reports", icon: BookOpen },
     { href: "/dashboard/admin/reports", label: "Analytics", icon: PieChart },
+    { href: "/dashboard/admin/settings", label: "Settings", icon: ShieldCheck },
   ],
   AUDITOR: [
     { href: "/dashboard/auditor", label: "Dashboard", icon: LayoutDashboard },
