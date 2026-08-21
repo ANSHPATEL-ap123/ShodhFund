@@ -16,7 +16,13 @@ const trend = [
 
 export default function PIDashboard() {
   const [userId, setUserId] = useState<string | null>(null);
-  useEffect(() => setUserId(getUser()?.id || "u-pi"), []);
+  const [hello, setHello] = useState("PI");
+  useEffect(() => {
+    const u = getUser();
+    setUserId(u?.id || "u-pi");
+    const nick = u?.name?.split(" ").find((p) => p && p !== "Dr.") || "PI";
+    setHello(nick);
+  }, []);
   const grants = useList<Grant>(userId ? `/api/grants?piId=${userId}` : "/api/grants");
   const expenses = useList<Expense>("/api/expenses");
   const [stats, setStats] = useState({ grants: 0, sanctioned: 0, spent: 0, utilization: 0 });
@@ -29,7 +35,7 @@ export default function PIDashboard() {
     <AppShell role="PI">
       <div className="flex items-start justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Welcome back, {getUser()?.name?.split(" ")[1] || "PI"}!</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Welcome back, {hello}!</h1>
           <p className="text-sm text-ink-2 mt-1">Live data from backend · JSON store</p>
         </div>
         <AddExpense onCreated={() => expenses.reload()} />

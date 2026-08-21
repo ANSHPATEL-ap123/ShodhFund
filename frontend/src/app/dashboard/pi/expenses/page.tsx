@@ -8,7 +8,13 @@ export default function Page() {
   const { data, reload, error } = useList<Expense>("/api/expenses");
   return (
     <AppShell role="PI">
-      <div className="flex justify-between mb-4"><h1 className="text-2xl font-semibold">Expenses</h1><AddExpense onCreated={reload} /></div>
+      <div className="flex justify-between mb-4 gap-3 flex-wrap">
+        <h1 className="text-2xl font-semibold">Expenses</h1>
+        <div className="flex gap-2">
+          <a className="btn-outline text-sm" href="/dashboard/pi/reports">Reports / CSV</a>
+          <AddExpense onCreated={reload} />
+        </div>
+      </div>
       {error && <p className="text-danger text-sm mb-2">{error}</p>}
       <div className="card overflow-hidden">
         <table className="w-full text-[13px]">
