@@ -4,6 +4,7 @@ import { api } from "@/lib/api";
 import { useList } from "@/lib/useList";
 import { getUser } from "@/lib/session";
 import { inr } from "@/lib/types";
+import { downloadFile } from "@/lib/download";
 
 type UC = { id: string; grantId: string; financialYear: string; totalUtilized: number; balanceAmount: number; status: string };
 
@@ -27,7 +28,7 @@ export default function P() {
                 <td className="px-4 py-2 tabular">{inr(u.totalUtilized)}</td>
                 <td className="px-4 py-2"><StatusChip s={u.status} /></td>
                 <td className="px-4 py-2 space-x-2">
-                  <a className="text-xs text-info" href={`/api/uc/${u.id}/pdf`} target="_blank">PDF</a>
+                  <button className="text-xs text-info" onClick={() => downloadFile(`/api/uc/${u.id}/pdf`, `${u.id}.pdf`)}>PDF</button>
                   {u.status === "DRAFT" && (
                     <button className="text-xs text-success" onClick={async () => {
                       await api(`/api/ucs/${u.id}/status`, { method: "POST", body: JSON.stringify({ status: "APPROVED", userId: getUser()?.id }) });

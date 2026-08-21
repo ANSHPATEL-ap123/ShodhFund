@@ -6,8 +6,8 @@ import { Logo } from "./Logo";
 import { getUser, logout, viewRole } from "@/lib/session";
 import type { Role, User } from "@/lib/types";
 import {
-  LayoutDashboard, FolderKanban, Receipt, FileText, Flag, Bell, Settings, HelpCircle,
-  ShieldCheck, PieChart, Building2, ClipboardList, History, AlertTriangle, Wallet, BookOpen, LogOut, Settings
+  LayoutDashboard, FolderKanban, Receipt, FileText, Flag, Bell, HelpCircle,
+  ShieldCheck, PieChart, Building2, ClipboardList, History, AlertTriangle, Wallet, BookOpen, LogOut
 } from "lucide-react";
 
 const nav: Record<Role, { href: string; label: string; icon: typeof LayoutDashboard }[]> = {
