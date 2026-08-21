@@ -10,6 +10,7 @@ import { extractBill } from "./ocr.js";
 import { ucPdfBuffer } from "./pdf.js";
 import { signToken, optionalAuth, authMiddleware } from "./auth.js";
 import { saveBill } from "./storage.js";
+import { answerQuestion } from "./ask.js";
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const uploadDir = path.join(root, "uploads");
@@ -82,7 +83,16 @@ app.get("/", (_req, res) => {
   });
 });
 
-app.get("/api/health", (_req, res) => res.json({ ok: true, service: "shodhfund-backend" }));
+app.get("/api/health", (_req, res) =>
+  res.json({
+    ok: true,
+    service: "shodhfund-backend",
+    jwt: Boolean(process.env.JWT_SECRET),
+    gemini: Boolean(process.env.GEMINI_API_KEY),
+    r2: Boolean(process.env.R2_ACCESS_KEY_ID),
+    store: "json",
+  })
+);
 
 app.post("/api/auth/login", (req, res) => {
   const email = String(req.body?.email || "").toLowerCase().trim();
@@ -127,6 +137,43 @@ app.get("/api/grants", (req, res) => {
   let list = data.grants;
   if (req.query.piId) list = list.filter((g) => g.piId === req.query.piId);
   res.json(list);
+});
+
+app.post("/api/grants", authMiddleware, (req, res) => {
+  const body = req.body || {};
+  if (!body.title || !body.agency) return res.status(400).json({ error: "title and agency required" });
+  const row = mutate((data) => {
+    const code = `GR-${String(body.agency).slice(0, 4).toUpperCase()}-${String(Date.now()).slice(-4)}`;
+    const amount = Number(body.amount) || 0;
+    const g = {
+      id: code,
+      title: body.title,
+      agency: String(body.agency).toUpperCase(),
+      amount,
+      spent: 0,
+      start: body.start || new Date().toISOString().slice(0, 10),
+      end: body.end || "2028-03-31",
+      status: "ACTIVE",
+      piId: req.user?.id || body.piId || "u-pi",
+      pi: body.pi || req.user?.email || "PI",
+      department: body.department || "Biotechnology",
+      ucDue: body.ucDue || "2026-12-31",
+    };
+    data.grants.unshift(g);
+    const heads = ["Equipment", "Consumables", "Travel", "Contingency"];
+    heads.forEach((name, i) => {
+      data.budgetHeads.push({
+        id: nextId("bh", data.budgetHeads),
+        grantId: g.id,
+        name,
+        allocated: Math.round(amount * [0.4, 0.3, 0.2, 0.1][i]),
+        spent: 0,
+      });
+    });
+    log(data, g.piId, "CREATE_GRANT", "Grant", g.id, { agency: g.agency });
+    return g;
+  });
+  res.status(201).json(row);
 });
 
 app.get("/api/grants/:id", (req, res) => {
@@ -390,6 +437,33 @@ app.get("/api/uc/:id/pdf", async (req, res) => {
     console.error(e);
     res.status(500).json({ error: e.message || "PDF failed. Run npm install in backend (pdfkit)." });
   }
+});
+
+app.get("/api/calendar", (_req, res) => {
+  const data = db();
+  const events = [
+    ...data.grants.map((g) => ({
+      id: `uc-${g.id}`,
+      type: "UC_DUE",
+      date: g.ucDue,
+      title: `UC due · ${g.agency}`,
+      subtitle: g.title,
+      href: `/grants/${g.id}`,
+    })),
+    ...data.milestones.map((m) => ({
+      id: m.id,
+      type: "MILESTONE",
+      date: m.dueDate,
+      title: m.title,
+      subtitle: m.grantId,
+      href: `/grants/${m.grantId}`,
+    })),
+  ].sort((a, b) => String(a.date).localeCompare(String(b.date)));
+  res.json(events);
+});
+
+app.post("/api/ask", (req, res) => {
+  res.json(answerQuestion(req.body?.q, db()));
 });
 
 app.use((err, _req, res, _next) => {

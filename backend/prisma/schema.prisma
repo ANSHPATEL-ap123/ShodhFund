@@ -1,0 +1,82 @@
+// Optional production schema. JSON store (db.json) still runs the demo.
+// Enable: DATABASE_URL in backend/.env → npx prisma db push && npx prisma db seed
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  PI
+  FINANCE
+  ADMIN
+  AUDITOR
+}
+
+enum GrantStatus {
+  ACTIVE
+  COMPLETED
+  SUSPENDED
+  CLOSED
+}
+
+enum ExpenseStatus {
+  DRAFT
+  SUBMITTED
+  APPROVED
+  REJECTED
+  CORRECTION_REQUESTED
+}
+
+enum ComplianceStatus {
+  COMPLIANT
+  WARNING
+  NON_COMPLIANT
+  PENDING
+}
+
+model User {
+  id           String   @id
+  email        String   @unique
+  name         String
+  password     String
+  role         Role
+  department   String?
+  designation  String?
+  createdAt    DateTime @default(now())
+}
+
+model Grant {
+  id         String      @id
+  title      String
+  agency     String
+  amount     Decimal
+  spent      Decimal     @default(0)
+  start      DateTime
+  end        DateTime
+  status     GrantStatus @default(ACTIVE)
+  piId       String
+  pi         String
+  department String
+  ucDue      DateTime
+}
+
+model Expense {
+  id             String            @id
+  grantId        String
+  vendor         String
+  invoice        String?
+  amount         Decimal
+  date           DateTime
+  head           String
+  status         ExpenseStatus     @default(SUBMITTED)
+  compliance     ComplianceStatus  @default(PENDING)
+  gst            String?
+  description    String?
+  submittedById  String
+  billUrl        String?
+}
