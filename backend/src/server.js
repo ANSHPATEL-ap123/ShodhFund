@@ -1,476 +1,431 @@
-import "dotenv/config";
-import express from "express";
-import cors from "cors";
-import path from "node:path";
-import fs from "node:fs";
-import { fileURLToPath } from "node:url";
-import multer from "multer";
-import { db, mutate, nextId } from "./store.js";
-import { extractBill } from "./ocr.js";
-import { ucPdfBuffer } from "./pdf.js";
-import { signToken, optionalAuth, authMiddleware } from "./auth.js";
-import { saveBill } from "./storage.js";
-import { answerQuestion } from "./ask.js";
-
-const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
-const uploadDir = path.join(root, "uploads");
-fs.mkdirSync(uploadDir, { recursive: true });
-const upload = multer({ dest: uploadDir, limits: { fileSize: 8 * 1024 * 1024 } });
+const express = require('express');
+const cors = require('cors');
+const jwt = require('jsonwebtoken');
+const { PrismaClient } = require('@prisma/client');
+const prisma = new PrismaClient();
 
 const app = express();
+app.use(cors());
+app.use(express.json());
+
+const JWT_SECRET = process.env.JWT_SECRET || 'shodhfund-secret-2026';
 const PORT = process.env.PORT || 4000;
 
-app.use(cors({ origin: true }));
-app.use(express.json({ limit: "2mb" }));
-app.use("/uploads", express.static(uploadDir));
-app.use(optionalAuth);
-
-function publicUser(u) {
-  if (!u) return null;
-  const { password, ...rest } = u;
-  return rest;
+// ─── Helpers ───────────────────────────────────────────
+function signToken(user) {
+  return jwt.sign({ id: user.id, email: user.email, role: user.role }, JWT_SECRET, { expiresIn: '7d' });
 }
 
-function log(data, userId, action, entityType, entityId, metadata) {
-  data.auditLogs.unshift({
-    id: nextId("AL", data.auditLogs),
-    action,
-    entityType,
-    entityId,
-    userId: userId || "system",
-    createdAt: new Date().toISOString(),
-    metadata: metadata || {},
-  });
+function optionalAuth(req, res, next) {
+  const auth = req.headers.authorization;
+  if (auth && auth.startsWith('Bearer ')) {
+    try { req.user = jwt.verify(auth.slice(7), JWT_SECRET); } catch {}
+  }
+  next();
 }
 
-function recomputeSpent(data, grantId) {
-  const approved = data.expenses.filter((e) => e.grantId === grantId && e.status === "APPROVED");
-  const g = data.grants.find((x) => x.id === grantId);
-  if (g) g.spent = approved.reduce((s, e) => s + Number(e.amount), 0);
-  for (const bh of data.budgetHeads.filter((b) => b.grantId === grantId)) {
-    bh.spent = approved.filter((e) => e.head === bh.name).reduce((s, e) => s + Number(e.amount), 0);
-  }
+function requireAuth(req, res, next) {
+  const auth = req.headers.authorization;
+  if (!auth || !auth.startsWith('Bearer ')) return res.status(401).json({ error: 'Unauthorized' });
+  try { req.user = jwt.verify(auth.slice(7), JWT_SECRET); next(); }
+  catch { return res.status(401).json({ error: 'Invalid token' }); }
 }
 
-function checkCompliance(exp, data) {
-  const notes = [];
-  let status = "COMPLIANT";
-  const dup = data.expenses.find(
-    (e) => e.id !== exp.id && e.invoice && exp.invoice && e.invoice === exp.invoice
-  );
-  if (dup) {
-    status = "NON_COMPLIANT";
-    notes.push(`Duplicate invoice ${exp.invoice} already used on ${dup.id}`);
-  }
-  if (exp.head === "Travel" && Number(exp.amount) > 45000) {
-    if (status === "COMPLIANT") status = "WARNING";
-    notes.push("Travel exceeds typical GFR metro DA / fare band — review Rule 40");
-  }
-  const gst = String(exp.gst || "");
-  if (gst && !/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][A-Z0-9]Z[A-Z0-9]$/i.test(gst)) {
-    if (status === "COMPLIANT") status = "WARNING";
-    notes.push("GSTIN format looks invalid");
-  }
-  return { status, notes };
+function requireRole(...roles) {
+  return (req, res, next) => {
+    if (!req.user || !roles.includes(req.user.role)) return res.status(403).json({ error: 'Forbidden' });
+    next();
+  };
 }
 
-app.get("/", (_req, res) => {
-  res.json({
-    service: "shodhfund-backend",
-    ok: true,
-    message: "API only. Open frontend http://localhost:3000",
-    health: "/api/health",
-  });
+async function logAction(userId, action, entityType, entityId, metadata) {
+  try {
+    await prisma.auditLog.create({ data: { userId, action, entityType, entityId, metadata: metadata || null } });
+  } catch {}
+}
+
+// ─── Auth ──────────────────────────────────────────────
+app.post('/api/auth/register', async (req, res) => {
+  try {
+    const { email, password, name, role, department, designation } = req.body;
+    const exists = await prisma.user.findUnique({ where: { email } });
+    if (exists) return res.status(400).json({ error: 'Email already exists' });
+    const user = await prisma.user.create({ data: { email, password, name, role: role || 'PI', department, designation } });
+    const token = signToken(user);
+    await logAction(user.id, 'REGISTER', 'User', user.id);
+    res.json({ token, user: { id: user.id, email: user.email, name: user.name, role: user.role } });
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-app.get("/api/health", (_req, res) =>
-  res.json({
-    ok: true,
-    service: "shodhfund-backend",
-    jwt: Boolean(process.env.JWT_SECRET),
-    gemini: Boolean(process.env.GEMINI_API_KEY),
-    r2: Boolean(process.env.R2_ACCESS_KEY_ID),
-    store: "json",
-  })
-);
-
-app.post("/api/auth/login", (req, res) => {
-  const email = String(req.body?.email || "").toLowerCase().trim();
-  const password = String(req.body?.password || "");
-  const data = db();
-  const user = data.users.find((u) => u.email.toLowerCase() === email);
-  if (!user || user.password !== password) {
-    return res.status(401).json({ error: "Invalid email or password. Demo password is demo1234." });
-  }
-  const token = signToken({ id: user.id, email: user.email, role: user.role });
-  res.json({ token, user: publicUser(user) });
+app.post('/api/auth/login', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    const user = await prisma.user.findUnique({ where: { email } });
+    if (!user || user.password !== password) return res.status(401).json({ error: 'Invalid credentials' });
+    const token = signToken(user);
+    await logAction(user.id, 'LOGIN', 'User', user.id);
+    res.json({ token, user: { id: user.id, email: user.email, name: user.name, role: user.role, department: user.department, designation: user.designation } });
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-app.get("/api/users", (_req, res) => res.json(db().users.map(publicUser)));
-
-app.get("/api/stats", (req, res) => {
-  const data = db();
-  const role = req.query.role;
-  const userId = req.query.userId;
-  let grants = data.grants;
-  let expenses = data.expenses;
-  if (role === "PI" && userId) {
-    grants = grants.filter((g) => g.piId === userId);
-    const ids = new Set(grants.map((g) => g.id));
-    expenses = expenses.filter((e) => ids.has(e.grantId));
-  }
-  const sanctioned = grants.reduce((s, g) => s + g.amount, 0);
-  const spent = grants.reduce((s, g) => s + g.spent, 0);
-  res.json({
-    grants: grants.length,
-    sanctioned,
-    spent,
-    utilization: sanctioned ? Math.round((spent / sanctioned) * 1000) / 10 : 0,
-    pendingExpenses: expenses.filter((e) => e.status === "SUBMITTED").length,
-    anomalies: data.anomalies.filter((a) => !a.resolved).length,
-    departments: new Set(data.grants.map((g) => g.department)).size,
-  });
+app.get('/api/auth/me', requireAuth, async (req, res) => {
+  try {
+    const user = await prisma.user.findUnique({ where: { id: req.user.id }, select: { id: true, email: true, name: true, role: true, department: true, designation: true, avatarUrl: true } });
+    res.json(user);
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-app.get("/api/grants", (req, res) => {
-  const data = db();
-  let list = data.grants;
-  if (req.query.piId) list = list.filter((g) => g.piId === req.query.piId);
-  res.json(list);
+// ─── Users ─────────────────────────────────────────────
+app.get('/api/users', requireAuth, requireRole('ADMIN', 'FINANCE', 'AUDITOR'), async (req, res) => {
+  try {
+    const users = await prisma.user.findMany({ select: { id: true, email: true, name: true, role: true, department: true, designation: true, createdAt: true } });
+    res.json(users);
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-app.post("/api/grants", authMiddleware, (req, res) => {
-  const body = req.body || {};
-  if (!body.title || !body.agency) return res.status(400).json({ error: "title and agency required" });
-  const row = mutate((data) => {
-    const code = `GR-${String(body.agency).slice(0, 4).toUpperCase()}-${String(Date.now()).slice(-4)}`;
-    const amount = Number(body.amount) || 0;
-    const g = {
-      id: code,
-      title: body.title,
-      agency: String(body.agency).toUpperCase(),
-      amount,
-      spent: 0,
-      start: body.start || new Date().toISOString().slice(0, 10),
-      end: body.end || "2028-03-31",
-      status: "ACTIVE",
-      piId: req.user?.id || body.piId || "u-pi",
-      pi: body.pi || req.user?.email || "PI",
-      department: body.department || "Biotechnology",
-      ucDue: body.ucDue || "2026-12-31",
-    };
-    data.grants.unshift(g);
-    const heads = ["Equipment", "Consumables", "Travel", "Contingency"];
-    heads.forEach((name, i) => {
-      data.budgetHeads.push({
-        id: nextId("bh", data.budgetHeads),
-        grantId: g.id,
-        name,
-        allocated: Math.round(amount * [0.4, 0.3, 0.2, 0.1][i]),
-        spent: 0,
-      });
+// ─── Grants ────────────────────────────────────────────
+app.get('/api/grants', optionalAuth, async (req, res) => {
+  try {
+    const where = {};
+    if (req.user?.role === 'PI') where.piId = req.user.id;
+    if (req.query.status) where.status = req.query.status;
+    const grants = await prisma.grant.findMany({
+      where,
+      include: { pi: { select: { id: true, name: true, email: true, department: true } }, budgetHeads: true, _count: { select: { expenses: true, milestones: true } } },
+      orderBy: { createdAt: 'desc' }
     });
-    log(data, g.piId, "CREATE_GRANT", "Grant", g.id, { agency: g.agency });
-    return g;
-  });
-  res.status(201).json(row);
+    res.json(grants);
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-app.get("/api/grants/:id", (req, res) => {
-  const data = db();
-  const g = data.grants.find((x) => x.id === req.params.id);
-  if (!g) return res.status(404).json({ error: "Grant not found" });
-  res.json({
-    ...g,
-    budgetHeads: data.budgetHeads.filter((b) => b.grantId === g.id),
-    expenses: data.expenses.filter((e) => e.grantId === g.id),
-    milestones: data.milestones.filter((m) => m.grantId === g.id),
-  });
+app.get('/api/grants/:id', optionalAuth, async (req, res) => {
+  try {
+    const grant = await prisma.grant.findUnique({
+      where: { id: req.params.id },
+      include: { pi: { select: { id: true, name: true, email: true, department: true } }, budgetHeads: { include: { expenses: true } }, expenses: { include: { submittedBy: { select: { name: true } }, approvals: true, anomalies: true }, orderBy: { createdAt: 'desc' } }, milestones: true, ucs: true, objections: true }
+    });
+    if (!grant) return res.status(404).json({ error: 'Grant not found' });
+    res.json(grant);
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-app.get("/api/expenses", (req, res) => {
-  const data = db();
-  let list = data.expenses;
-  if (req.query.grantId) list = list.filter((e) => e.grantId === req.query.grantId);
-  if (req.query.status) list = list.filter((e) => e.status === req.query.status);
-  if (req.query.submittedById) list = list.filter((e) => e.submittedById === req.query.submittedById);
-  res.json(list);
+app.post('/api/grants', requireAuth, requireRole('PI', 'ADMIN'), async (req, res) => {
+  try {
+    const data = req.body;
+    data.piId = data.piId || req.user.id;
+    data.sanctionedAmount = parseFloat(data.sanctionedAmount) || 0;
+    data.startDate = new Date(data.startDate);
+    data.endDate = new Date(data.endDate);
+    if (data.ucDueDate) data.ucDueDate = new Date(data.ucDueDate);
+    const grant = await prisma.grant.create({ data });
+    await logAction(req.user.id, 'CREATE_GRANT', 'Grant', grant.id);
+    res.status(201).json(grant);
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-app.post("/api/expenses", authMiddleware, (req, res) => {
-  const body = req.body || {};
-  const row = mutate((data) => {
-    const exp = {
-      id: nextId("EXP", data.expenses),
-      grantId: body.grantId || body.grant || data.grants[0].id,
-      vendor: body.vendor || "Unknown",
-      invoice: body.invoice || "",
-      amount: Number(body.amount) || 0,
-      date: body.date || new Date().toISOString().slice(0, 10),
-      head: body.head || "Contingency",
-      gst: body.gst || "",
-      description: body.description || body.desc || "",
-      status: "SUBMITTED",
-      submittedById: req.user?.id || body.submittedById || "u-pi",
-    };
-    const c = checkCompliance(exp, data);
-    exp.compliance = c.status;
-    exp.complianceNotes = c.notes;
-    data.expenses.unshift(exp);
-    if (c.status === "NON_COMPLIANT") {
-      data.anomalies.unshift({
-        id: nextId("AN", data.anomalies),
-        severity: "HIGH",
-        reason: c.notes.join("; "),
-        expenseId: exp.id,
-        resolved: false,
-      });
+app.put('/api/grants/:id', requireAuth, requireRole('PI', 'ADMIN'), async (req, res) => {
+  try {
+    const data = req.body;
+    if (data.sanctionedAmount) data.sanctionedAmount = parseFloat(data.sanctionedAmount);
+    if (data.startDate) data.startDate = new Date(data.startDate);
+    if (data.endDate) data.endDate = new Date(data.endDate);
+    if (data.ucDueDate) data.ucDueDate = new Date(data.ucDueDate);
+    const grant = await prisma.grant.update({ where: { id: req.params.id }, data });
+    await logAction(req.user.id, 'UPDATE_GRANT', 'Grant', grant.id);
+    res.json(grant);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ─── Budget Heads ──────────────────────────────────────
+app.get('/api/grants/:grantId/budget-heads', optionalAuth, async (req, res) => {
+  try {
+    const heads = await prisma.budgetHead.findMany({ where: { grantId: req.params.grantId }, include: { expenses: true } });
+    res.json(heads);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/grants/:grantId/budget-heads', requireAuth, requireRole('PI', 'ADMIN'), async (req, res) => {
+  try {
+    const data = { ...req.body, grantId: req.params.grantId, allocatedAmount: parseFloat(req.body.allocatedAmount) || 0 };
+    const head = await prisma.budgetHead.create({ data });
+    await logAction(req.user.id, 'CREATE_BUDGET_HEAD', 'BudgetHead', head.id);
+    res.status(201).json(head);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ─── Expenses ──────────────────────────────────────────
+app.get('/api/expenses', optionalAuth, async (req, res) => {
+  try {
+    const where = {};
+    if (req.query.grantId) where.grantId = req.query.grantId;
+    if (req.query.status) where.status = req.query.status;
+    if (req.user?.role === 'PI') where.submittedById = req.user.id;
+    const expenses = await prisma.expense.findMany({
+      where,
+      include: { grant: { select: { id: true, title: true, grantCode: true } }, budgetHead: { select: { id: true, name: true, category: true } }, submittedBy: { select: { id: true, name: true } }, approvals: { include: { approver: { select: { name: true } } } }, anomalies: true },
+      orderBy: { createdAt: 'desc' }
+    });
+    res.json(expenses);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/api/expenses/:id', optionalAuth, async (req, res) => {
+  try {
+    const expense = await prisma.expense.findUnique({
+      where: { id: req.params.id },
+      include: { grant: true, budgetHead: true, submittedBy: { select: { id: true, name: true, email: true } }, approvals: { include: { approver: { select: { name: true, role: true } } } }, anomalies: true }
+    });
+    if (!expense) return res.status(404).json({ error: 'Expense not found' });
+    res.json(expense);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/expenses', requireAuth, async (req, res) => {
+  try {
+    const data = { ...req.body, amount: parseFloat(req.body.amount) || 0, date: new Date(req.body.date), submittedById: req.user.id };
+    const expense = await prisma.expense.create({ data });
+    // Update grant spentAmount
+    await prisma.grant.update({ where: { id: data.grantId }, data: { spentAmount: { increment: data.amount } } });
+    // Update budgetHead spentAmount
+    await prisma.budgetHead.update({ where: { id: data.budgetHeadId }, data: { spentAmount: { increment: data.amount } } });
+    await logAction(req.user.id, 'CREATE_EXPENSE', 'Expense', expense.id);
+    res.status(201).json(expense);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.put('/api/expenses/:id', requireAuth, async (req, res) => {
+  try {
+    const data = req.body;
+    if (data.amount) data.amount = parseFloat(data.amount);
+    if (data.date) data.date = new Date(data.date);
+    const expense = await prisma.expense.update({ where: { id: req.params.id }, data });
+    await logAction(req.user.id, 'UPDATE_EXPENSE', 'Expense', expense.id);
+    res.json(expense);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ─── Approvals ─────────────────────────────────────────
+app.post('/api/expenses/:expenseId/approve', requireAuth, requireRole('FINANCE', 'ADMIN'), async (req, res) => {
+  try {
+    const { action, reason } = req.body;
+    const approval = await prisma.approval.create({ data: { expenseId: req.params.expenseId, approverId: req.user.id, action, reason } });
+    const statusMap = { APPROVED: 'APPROVED', REJECTED: 'REJECTED', CORRECTION_REQUESTED: 'CORRECTION_REQUESTED' };
+    await prisma.expense.update({ where: { id: req.params.expenseId }, data: { status: statusMap[action] || 'SUBMITTED' } });
+    await logAction(req.user.id, `EXPENSE_${action}`, 'Expense', req.params.expenseId);
+    res.status(201).json(approval);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ─── Anomalies ─────────────────────────────────────────
+app.get('/api/anomalies', optionalAuth, async (req, res) => {
+  try {
+    const where = {};
+    if (req.query.resolved === 'false') where.resolved = false;
+    if (req.query.severity) where.severity = req.query.severity;
+    const anomalies = await prisma.anomaly.findMany({ where, include: { expense: { include: { grant: { select: { title: true, grantCode: true } } } } }, orderBy: { detectedAt: 'desc' } });
+    res.json(anomalies);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/expenses/:expenseId/anomalies', requireAuth, requireRole('FINANCE', 'AUDITOR', 'ADMIN'), async (req, res) => {
+  try {
+    const anomaly = await prisma.anomaly.create({ data: { expenseId: req.params.expenseId, severity: req.body.severity, reason: req.body.reason } });
+    await prisma.expense.update({ where: { id: req.params.expenseId }, data: { complianceStatus: req.body.severity === 'HIGH' ? 'NON_COMPLIANT' : 'WARNING' } });
+    await logAction(req.user.id, 'FLAG_ANOMALY', 'Anomaly', anomaly.id);
+    res.status(201).json(anomaly);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.put('/api/anomalies/:id/resolve', requireAuth, requireRole('FINANCE', 'ADMIN'), async (req, res) => {
+  try {
+    const anomaly = await prisma.anomaly.update({ where: { id: req.params.id }, data: { resolved: true } });
+    await logAction(req.user.id, 'RESOLVE_ANOMALY', 'Anomaly', anomaly.id);
+    res.json(anomaly);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ─── Utilization Certificates ──────────────────────────
+app.get('/api/grants/:grantId/ucs', optionalAuth, async (req, res) => {
+  try {
+    const ucs = await prisma.utilizationCertificate.findMany({ where: { grantId: req.params.grantId }, orderBy: { createdAt: 'desc' } });
+    res.json(ucs);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/grants/:grantId/ucs', requireAuth, requireRole('PI', 'ADMIN'), async (req, res) => {
+  try {
+    const data = { ...req.body, grantId: req.params.grantId, totalUtilized: parseFloat(req.body.totalUtilized) || 0, balanceAmount: parseFloat(req.body.balanceAmount) || 0 };
+    const uc = await prisma.utilizationCertificate.create({ data });
+    await logAction(req.user.id, 'CREATE_UC', 'UtilizationCertificate', uc.id);
+    res.status(201).json(uc);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.put('/api/ucs/:id', requireAuth, async (req, res) => {
+  try {
+    const uc = await prisma.utilizationCertificate.update({ where: { id: req.params.id }, data: req.body });
+    await logAction(req.user.id, 'UPDATE_UC', 'UtilizationCertificate', uc.id);
+    res.json(uc);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ─── Milestones ────────────────────────────────────────
+app.get('/api/grants/:grantId/milestones', optionalAuth, async (req, res) => {
+  try {
+    const milestones = await prisma.milestone.findMany({ where: { grantId: req.params.grantId }, orderBy: { dueDate: 'asc' } });
+    res.json(milestones);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/grants/:grantId/milestones', requireAuth, requireRole('PI', 'ADMIN'), async (req, res) => {
+  try {
+    const data = { ...req.body, grantId: req.params.grantId, dueDate: new Date(req.body.dueDate) };
+    const ms = await prisma.milestone.create({ data });
+    await logAction(req.user.id, 'CREATE_MILESTONE', 'Milestone', ms.id);
+    res.status(201).json(ms);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.put('/api/milestones/:id', requireAuth, async (req, res) => {
+  try {
+    const ms = await prisma.milestone.update({ where: { id: req.params.id }, data: req.body });
+    res.json(ms);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ─── Objections ────────────────────────────────────────
+app.get('/api/grants/:grantId/objections', optionalAuth, async (req, res) => {
+  try {
+    const objections = await prisma.objection.findMany({ where: { grantId: req.params.grantId }, orderBy: { createdAt: 'desc' } });
+    res.json(objections);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/grants/:grantId/objections', requireAuth, requireRole('AUDITOR', 'FINANCE', 'ADMIN'), async (req, res) => {
+  try {
+    const obj = await prisma.objection.create({ data: { ...req.body, grantId: req.params.grantId } });
+    await logAction(req.user.id, 'CREATE_OBJECTION', 'Objection', obj.id);
+    res.status(201).json(obj);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.put('/api/objections/:id', requireAuth, async (req, res) => {
+  try {
+    const obj = await prisma.objection.update({ where: { id: req.params.id }, data: req.body });
+    res.json(obj);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ─── Audit Logs ────────────────────────────────────────
+app.get('/api/audit-logs', requireAuth, requireRole('ADMIN', 'AUDITOR', 'FINANCE'), async (req, res) => {
+  try {
+    const where = {};
+    if (req.query.userId) where.userId = req.query.userId;
+    if (req.query.entityType) where.entityType = req.query.entityType;
+    const logs = await prisma.auditLog.findMany({ where, include: { user: { select: { name: true, role: true } } }, orderBy: { createdAt: 'desc' }, take: 200 });
+    res.json(logs);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ─── Notifications ─────────────────────────────────────
+app.get('/api/notifications', requireAuth, async (req, res) => {
+  try {
+    const notifs = await prisma.notification.findMany({ where: { userId: req.user.id }, orderBy: { createdAt: 'desc' }, take: 50 });
+    res.json(notifs);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.put('/api/notifications/:id/read', requireAuth, async (req, res) => {
+  try {
+    const n = await prisma.notification.update({ where: { id: req.params.id }, data: { read: true } });
+    res.json(n);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/notifications', requireAuth, requireRole('ADMIN'), async (req, res) => {
+  try {
+    const n = await prisma.notification.create({ data: req.body });
+    res.status(201).json(n);
+  } catch (e) { res.status(500).json({ error: e.messege }); }
+});
+
+// ─── Dashboard Stats ───────────────────────────────────
+app.get('/api/dashboard', requireAuth, async (req, res) => {
+  try {
+    const [grantCount, activeGrants, totalSanctioned, totalSpent, expenseCount, pendingExpenses, anomalyCount, unresolvedAnomalies] = await Promise.all([
+      prisma.grant.count(),
+      prisma.grant.count({ where: { status: 'ACTIVE' } }),
+      prisma.grant.aggregate({ _sum: { sanctionedAmount: true } }),
+      prisma.grant.aggregate({ _sum: { spentAmount: true } }),
+      prisma.expense.count(),
+      prisma.expense.count({ where: { status: 'SUBMITTED' } }),
+      prisma.anomaly.count(),
+      prisma.anomaly.count({ where: { resolved: false } })
+    ]);
+    res.json({
+      grantCount, activeGrants,
+      totalSanctioned: totalSanctioned._sum.sanctionedAmount || 0,
+      totalSpent: totalSpent._sum.spentAmount || 0,
+      expenseCount, pendingExpenses,
+      anomalyCount, unresolvedAnomalies
+    });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ─── Compliance Review ─────────────────────────────────
+app.get('/api/compliance-review', requireAuth, requireRole('FINANCE', 'AUDITOR', 'ADMIN'), async (req, res) => {
+  try {
+    const expenses = await prisma.expense.findMany({
+      where: { complianceStatus: { in: ['PENDING', 'WARNING', 'NON_COMPLIANT'] } },
+      include: { grant: { select: { title: true, grantCode: true } }, submittedBy: { select: { name: true } }, anomalies: true, approvals: { include: { approver: { select: { name: true } } } } },
+      orderBy: { createdAt: 'desc' }
+    });
+    res.json(expenses);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ─── Ask ShodhFund (AI Chatbot) ────────────────────────
+app.post('/api/ask', optionalAuth, async (req, res) => {
+  try {
+    const { question } = req.body;
+    if (!question) return res.status(400).json({ error: 'Question required' });
+
+    const GEMINI_KEY = process.env.GEMINI_API_KEY;
+    if (GEMINI_KEY) {
+      try {
+        const fetch = (await import('node-fetch')).default;
+        const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_KEY}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ contents: [{ parts: [{ text: `You are ShodhFund AI assistant. Help with research fund management, grants, UC, compliance. Be concise.\n\nUser: ${question}` }] }] })
+        });
+        const data = await resp.json();
+        const answer = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (answer) return res.json({ answer, source: 'gemini' });
+      } catch {}
     }
-    log(data, exp.submittedById, "SUBMIT_EXPENSE", "Expense", exp.id, { amount: exp.amount });
-    data.notifications.unshift({
-      id: nextId("N", data.notifications),
-      userId: "u-fin",
-      title: "New expense to verify",
-      message: `${exp.vendor} · ₹${exp.amount.toLocaleString("en-IN")} on ${exp.grantId}`,
-      type: "APPROVAL_PENDING",
-      read: false,
-    });
-    return exp;
-  });
-  res.status(201).json(row);
-});
 
-app.post("/api/expenses/:id/decide", authMiddleware, (req, res) => {
-  const action = String(req.body?.action || "").toUpperCase();
-  const reason = req.body?.reason || "";
-  const approverId = req.body?.approverId || "u-fin";
-  if (!["APPROVED", "REJECTED", "CORRECTION_REQUESTED"].includes(action)) {
-    return res.status(400).json({ error: "Invalid action" });
-  }
-  const row = mutate((data) => {
-    const exp = data.expenses.find((e) => e.id === req.params.id);
-    if (!exp) return null;
-    exp.status = action;
-    data.approvals.unshift({
-      id: nextId("AP", data.approvals),
-      expenseId: exp.id,
-      action,
-      reason,
-      approverId,
-      createdAt: new Date().toISOString(),
-    });
-    recomputeSpent(data, exp.grantId);
-    log(data, approverId, action, "Expense", exp.id, { reason });
-    return exp;
-  });
-  if (!row) return res.status(404).json({ error: "Expense not found" });
-  res.json(row);
-});
-
-app.get("/api/anomalies", (_req, res) => res.json(db().anomalies));
-app.post("/api/anomalies/:id/resolve", (req, res) => {
-  const row = mutate((data) => {
-    const a = data.anomalies.find((x) => x.id === req.params.id);
-    if (a) a.resolved = true;
-    return a;
-  });
-  if (!row) return res.status(404).json({ error: "Not found" });
-  res.json(row);
-});
-
-app.get("/api/budget-heads", (req, res) => {
-  const data = db();
-  let list = data.budgetHeads;
-  if (req.query.grantId) list = list.filter((b) => b.grantId === req.query.grantId);
-  res.json(list);
-});
-
-app.get("/api/notifications", (req, res) => {
-  const data = db();
-  let list = data.notifications;
-  if (req.query.userId) list = list.filter((n) => n.userId === req.query.userId);
-  res.json(list);
-});
-
-app.post("/api/notifications/:id/read", (req, res) => {
-  const row = mutate((data) => {
-    const n = data.notifications.find((x) => x.id === req.params.id);
-    if (n) n.read = true;
-    return n;
-  });
-  if (!row) return res.status(404).json({ error: "Not found" });
-  res.json(row);
-});
-
-app.patch("/api/budget-heads/:id", (req, res) => {
-  const allocated = Number(req.body?.allocated);
-  const row = mutate((data) => {
-    const b = data.budgetHeads.find((x) => x.id === req.params.id);
-    if (!b) return null;
-    if (!Number.isNaN(allocated) && allocated >= 0) b.allocated = allocated;
-    log(data, req.body?.userId || "u-fin", "UPDATE_BUDGET", "BudgetHead", b.id, { allocated: b.allocated });
-    return b;
-  });
-  if (!row) return res.status(404).json({ error: "Not found" });
-  res.json(row);
-});
-
-app.get("/api/search", (req, res) => {
-  const q = String(req.query.q || "").toLowerCase().trim();
-  const data = db();
-  if (!q) return res.json({ grants: [], expenses: [] });
-  const grants = data.grants.filter((g) =>
-    `${g.id} ${g.title} ${g.agency} ${g.pi}`.toLowerCase().includes(q)
-  );
-  const expenses = data.expenses.filter((e) =>
-    `${e.id} ${e.vendor} ${e.invoice} ${e.grantId}`.toLowerCase().includes(q)
-  );
-  res.json({ grants, expenses });
-});
-
-app.get("/api/export/expenses.csv", (req, res) => {
-  const data = db();
-  let list = data.expenses;
-  if (req.query.grantId) list = list.filter((e) => e.grantId === req.query.grantId);
-  const header = "id,grantId,vendor,invoice,amount,date,head,status,compliance,gst";
-  const lines = list.map((e) =>
-    [e.id, e.grantId, e.vendor, e.invoice, e.amount, e.date, e.head, e.status, e.compliance, e.gst]
-      .map((v) => `"${String(v ?? "").replaceAll('"', '""')}"`)
-      .join(",")
-  );
-  res.setHeader("Content-Type", "text/csv");
-  res.setHeader("Content-Disposition", "attachment; filename=shodhfund-expenses.csv");
-  res.send([header, ...lines].join("\n"));
-});
-
-app.get("/api/milestones", (req, res) => {
-  const data = db();
-  let list = data.milestones;
-  if (req.query.grantId) list = list.filter((m) => m.grantId === req.query.grantId);
-  res.json(list);
-});
-
-app.get("/api/audit-logs", (_req, res) => res.json(db().auditLogs.slice(0, 80)));
-app.get("/api/objections", (_req, res) => res.json(db().objections));
-app.get("/api/approvals", (_req, res) => res.json(db().approvals));
-
-app.post("/api/ocr/extract", upload.single("file"), async (req, res) => {
-  try {
-    const filename = req.file?.originalname || req.body?.filename || "";
-    const hint = req.body?.hint || filename;
-    let buffer;
-    if (req.file?.path) buffer = fs.readFileSync(req.file.path);
-    let stored = null;
-    if (buffer) stored = await saveBill({ buffer, filename, mime: req.file?.mimetype });
-    const extracted = await extractBill({ filename, hint, buffer });
-    res.json({ ...extracted, compliance: "PENDING", billUrl: stored?.url || null, storage: stored?.storage || null });
-  } catch (e) {
-    res.status(500).json({ error: e.message || "OCR failed" });
-  }
-});
-
-app.post("/api/uc/generate", authMiddleware, (req, res) => {
-  const data = db();
-  const grantId = req.body?.grantId || data.grants[0].id;
-  const g = data.grants.find((x) => x.id === grantId) || data.grants[0];
-  const heads = data.budgetHeads.filter((b) => b.grantId === g.id);
-  const approved = data.expenses.filter((e) => e.grantId === g.id && e.status === "APPROVED");
-  const utilized = approved.reduce((s, e) => s + e.amount, 0) || g.spent;
-  const uc = mutate((d) => {
-    const doc = {
-      id: nextId("UC", d.ucs),
-      grantId: g.id,
-      financialYear: req.body?.financialYear || "2025-26",
-      period: req.body?.period || "01 Apr 2025 – 31 Mar 2026",
-      totalUtilized: utilized,
-      balanceAmount: g.amount - utilized,
-      status: "DRAFT",
-      createdAt: new Date().toISOString(),
-      heads,
-      expenses: approved,
+    // Keyword fallback
+    const q = question.toLowerCase();
+    const kb = {
+      uc: 'Utilization Certificates (UC) are mandatory annual statements showing fund utilization. They must be submitted to the funding agency by the UC due date. Track UC status on the Grants page.',
+      anomaly: 'Anomalies are compliance flags detected on expenses — duplicate invoices, budget overruns, vendor mismatches. Finance/Auditors can flag them, and they must be resolved before UC submission.',
+      budget: 'Budget Heads categorize grant expenditure: Equipment, Consumables, Travel, Contingency, Manpower, Overhead. Each head tracks allocated vs spent amounts.',
+      approval: 'Expense approval follows: PI submits → Finance reviews → Approved/Rejected/Correction Requested. Multiple approval levels can be configured.',
+      grant: 'Grants are research funding from agencies like DST, DBT, CSIR, SERB. Each grant has a sanction order, budget heads, milestones, and UC obligations.',
+      compliance: 'Compliance review flags expenses with issues. Status: COMPLIANT, WARNING, NON_COMPLIANT, PENDING. Anomalies are auto-detected and can also be manually flagged.',
+      milestone: 'Milestones track research deliverables and deadlines. Status: PENDING → IN_PROGRESS → COMPLETED/DELAYED. They help ensure timely fund utilization and UC readiness.'
     };
-    d.ucs.unshift(doc);
-    log(d, req.body?.userId || "u-pi", "GENERATE_UC", "UC", doc.id, { grantId: g.id });
-    return doc;
-  });
-  res.json({
-    ...uc,
-    grant: g,
-    utilizationPct: g.amount ? Math.round((utilized / g.amount) * 1000) / 10 : 0,
-    summary: `GFR 12-A draft for ${g.id}. ${approved.length} approved vouchers, ₹${utilized.toLocaleString("en-IN")} utilized. Duplicate EXP-1035 excluded until finance decision.`,
-  });
+    let answer = 'I can help with grants, budgets, expenses, approvals, anomalies, UC, milestones, and compliance. What would you like to know?';
+    for (const [key, val] of Object.entries(kb)) {
+      if (q.includes(key)) { answer = val; break; }
+    }
+    res.json({ answer, source: 'keyword' });
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-app.get("/api/ucs", (_req, res) => res.json(db().ucs));
+// ─── Health ────────────────────────────────────────────
+app.get('/api/health', (req, res) => res.json({ status: 'ok', db: 'prisma', time: new Date().toISOString() }));
 
-app.post("/api/ucs/:id/status", (req, res) => {
-  const status = String(req.body?.status || "").toUpperCase();
-  const allowed = ["DRAFT", "UNDER_REVIEW", "APPROVED", "SUBMITTED_TO_AGENCY"];
-  if (!allowed.includes(status)) return res.status(400).json({ error: "Bad status" });
-  const row = mutate((data) => {
-    const u = data.ucs.find((x) => x.id === req.params.id);
-    if (!u) return null;
-    u.status = status;
-    log(data, req.body?.userId || "u-fin", "UC_STATUS", "UC", u.id, { status });
-    return u;
-  });
-  if (!row) return res.status(404).json({ error: "Not found" });
-  res.json(row);
-});
-
-app.get("/api/uc/:id/pdf", async (req, res) => {
-  try {
-    const data = db();
-    const uc = data.ucs.find((x) => x.id === req.params.id);
-    if (!uc) return res.status(404).json({ error: "Generate a UC first, then download PDF." });
-    const grant = data.grants.find((g) => g.id === uc.grantId);
-    if (!grant) return res.status(404).json({ error: "Grant missing" });
-    const buf = await ucPdfBuffer({
-      grant,
-      uc,
-      heads: uc.heads || data.budgetHeads.filter((b) => b.grantId === uc.grantId),
-    });
-    res.setHeader("Content-Type", "application/pdf");
-    res.setHeader("Content-Disposition", `attachment; filename="${uc.id}.pdf"`);
-    res.end(buf);
-  } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: e.message || "PDF failed. Run npm install in backend (pdfkit)." });
-  }
-});
-
-app.get("/api/calendar", (_req, res) => {
-  const data = db();
-  const events = [
-    ...data.grants.map((g) => ({
-      id: `uc-${g.id}`,
-      type: "UC_DUE",
-      date: g.ucDue,
-      title: `UC due · ${g.agency}`,
-      subtitle: g.title,
-      href: `/grants/${g.id}`,
-    })),
-    ...data.milestones.map((m) => ({
-      id: m.id,
-      type: "MILESTONE",
-      date: m.dueDate,
-      title: m.title,
-      subtitle: m.grantId,
-      href: `/grants/${m.grantId}`,
-    })),
-  ].sort((a, b) => String(a.date).localeCompare(String(b.date)));
-  res.json(events);
-});
-
-app.post("/api/ask", (req, res) => {
-  res.json(answerQuestion(req.body?.q, db()));
-});
-
-app.use((err, _req, res, _next) => {
-  console.error(err);
-  res.status(500).json({ error: err?.message || "Server error" });
-});
-
-app.listen(PORT, "0.0.0.0", () => {
-  console.log(`ShodhFund API http://localhost:${PORT}`);
-});
+// ─── Start ─────────────────────────────────────────────
+app.listen(PORT, () => console.log(`🚀 ShodhFund API on port ${PORT} (Prisma+Neon)`));

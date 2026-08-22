@@ -1,6 +1,3 @@
-// Optional production schema. JSON store (db.json) still runs the demo.
-// Enable: DATABASE_URL in backend/.env → npx prisma db push && npx prisma db seed
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -24,6 +21,15 @@ enum GrantStatus {
   CLOSED
 }
 
+enum BudgetCategory {
+  EQUIPMENT
+  CONSUMABLES
+  TRAVEL
+  CONTINGENCY
+  MANPOWER
+  OVERHEAD
+}
+
 enum ExpenseStatus {
   DRAFT
   SUBMITTED
@@ -39,44 +45,202 @@ enum ComplianceStatus {
   PENDING
 }
 
+enum ApprovalAction {
+  APPROVED
+  REJECTED
+  CORRECTION_REQUESTED
+}
+
+enum UCStatus {
+  DRAFT
+  UNDER_REVIEW
+  APPROVED
+  SUBMITTED_TO_AGENCY
+}
+
+enum Severity {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum MilestoneStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  DELAYED
+}
+
+enum NotificationType {
+  UC_DUE
+  APPROVAL_PENDING
+  ANOMALY_DETECTED
+  BUDGET_THRESHOLD
+  GENERAL
+}
+
 model User {
-  id           String   @id
-  email        String   @unique
-  name         String
-  password     String
-  role         Role
-  department   String?
-  designation  String?
-  createdAt    DateTime @default(now())
+  id          String   @id @default(cuid())
+  email       String   @unique
+  password    String
+  name        String
+  role        Role
+  department  String?
+  designation String?
+  avatarUrl   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  grants     Grant[]     @relation("GrantPI")
+  expenses   Expense[]   @relation("SubmittedBy")
+  approvals  Approval[]  @relation("Approver")
+  auditLogs  AuditLog[]  @relation("LogUser")
 }
 
 model Grant {
-  id         String      @id
-  title      String
-  agency     String
-  amount     Decimal
-  spent      Decimal     @default(0)
-  start      DateTime
-  end        DateTime
-  status     GrantStatus @default(ACTIVE)
-  piId       String
-  pi         String
-  department String
-  ucDue      DateTime
+  id               String      @id @default(cuid())
+  grantCode        String      @unique
+  title            String
+  agency           String
+  sanctionNumber   String?
+  sanctionedAmount Decimal     @db.Decimal(14, 2)
+  spentAmount      Decimal     @default(0) @db.Decimal(14, 2)
+  startDate        DateTime
+  endDate          DateTime
+  status           GrantStatus @default(ACTIVE)
+  sanctionLetterUrl String?
+  ucDueDate        DateTime?
+  createdAt        DateTime    @default(now())
+
+  piId String
+  pi   User   @relation("GrantPI", fields: [piId], references: [id])
+
+  budgetHeads BudgetHead[]
+  expenses    Expense[]
+  ucs         UtilizationCertificate[]
+  milestones  Milestone[]
+  objections  Objection[]
+}
+
+model BudgetHead {
+  id             String         @id @default(cuid())
+  name           String
+  category       BudgetCategory
+  allocatedAmount Decimal       @db.Decimal(14, 2)
+  spentAmount    Decimal        @default(0) @db.Decimal(14, 2)
+  grantId        String
+  grant          Grant          @relation(fields: [grantId], references: [id], onDelete: Cascade)
+
+  expenses Expense[]
 }
 
 model Expense {
-  id             String            @id
-  grantId        String
-  vendor         String
-  invoice        String?
-  amount         Decimal
-  date           DateTime
-  head           String
-  status         ExpenseStatus     @default(SUBMITTED)
-  compliance     ComplianceStatus  @default(PENDING)
-  gst            String?
-  description    String?
-  submittedById  String
-  billUrl        String?
+  id               String           @id @default(cuid())
+  amount           Decimal          @db.Decimal(14, 2)
+  date             DateTime
+  vendorName       String
+  invoiceNumber    String?
+  gstNumber        String?
+  description      String
+  billUrl          String?
+  status           ExpenseStatus    @default(SUBMITTED)
+  complianceStatus ComplianceStatus @default(PENDING)
+  complianceNotes  Json?
+  aiExtracted      Boolean          @default(false)
+  createdAt        DateTime         @default(now())
+
+  grantId      String
+  grant        Grant      @relation(fields: [grantId], references: [id])
+
+  budgetHeadId String
+  budgetHead   BudgetHead @relation(fields: [budgetHeadId], references: [id])
+
+  submittedById String
+  submittedBy   User       @relation("SubmittedBy", fields: [submittedById], references: [id])
+
+  approvals Approval[]
+  anomalies Anomaly[]
+}
+
+model Approval {
+  id        String         @id @default(cuid())
+  action    ApprovalAction
+  reason    String?
+  createdAt DateTime       @default(now())
+
+  expenseId  String
+  expense    Expense @relation(fields: [expenseId], references: [id])
+
+  approverId String
+  approver   User    @relation("Approver", fields: [approverId], references: [id])
+}
+
+model UtilizationCertificate {
+  id              String   @id @default(cuid())
+  financialYear   String
+  period          String?
+  totalUtilized   Decimal  @db.Decimal(14, 2)
+  balanceAmount   Decimal  @db.Decimal(14, 2)
+  generatedContent Json?
+  pdfUrl          String?
+  status          UCStatus @default(DRAFT)
+  createdAt       DateTime @default(now())
+
+  grantId String
+  grant   Grant   @relation(fields: [grantId], references: [id])
+}
+
+model Anomaly {
+  id        String   @id @default(cuid())
+  severity  Severity
+  reason    String
+  detectedAt DateTime @default(now())
+  resolved  Boolean  @default(false)
+
+  expenseId String
+  expense   Expense  @relation(fields: [expenseId], references: [id])
+}
+
+model Milestone {
+  id      String          @id @default(cuid())
+  title   String
+  dueDate DateTime
+  status  MilestoneStatus @default(PENDING)
+
+  grantId String
+  grant   Grant   @relation(fields: [grantId], references: [id])
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  action    String
+  entityType String
+  entityId  String
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  userId String
+  user   User    @relation("LogUser", fields: [userId], references: [id])
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  title     String
+  message   String
+  type      NotificationType
+  read      Boolean          @default(false)
+  createdAt DateTime         @default(now())
+
+  userId String
+}
+
+model Objection {
+  id        String   @id @default(cuid())
+  title     String
+  status    String   @default("OPEN")
+  note      String?
+  createdAt DateTime @default(now())
+
+  grantId String
+  grant   Grant   @relation(fields: [grantId], references: [id])
 }
