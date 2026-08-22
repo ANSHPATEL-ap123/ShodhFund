@@ -57,6 +57,20 @@
   ],
   "grants": [
     {
+      "id": "GR-DST-9707",
+      "title": "icmrkdm",
+      "agency": "DST",
+      "amount": 2500000,
+      "spent": 0,
+      "start": "2026-08-22",
+      "end": "2028-03-31",
+      "status": "ACTIVE",
+      "piId": "u-pi",
+      "pi": "Dr. Arjun Sharma",
+      "department": "Biotechnology",
+      "ucDue": "2026-12-31"
+    },
+    {
       "id": "GR-DST-2401",
       "title": "CRISPR-based diagnostics for AMR pathogens",
       "agency": "DST",
@@ -236,6 +250,21 @@
   ],
   "expenses": [
     {
+      "id": "EXP-1043",
+      "grantId": "GR-DST-2401",
+      "vendor": "Thermo Fisher Scientific",
+      "invoice": "TFS/DEL/92142",
+      "amount": 187500,
+      "date": "2026-08-01",
+      "head": "Equipment",
+      "gst": "07AABCT3518Q1Z4",
+      "description": "Lab instrument accessory",
+      "status": "SUBMITTED",
+      "submittedById": "u-pi",
+      "compliance": "COMPLIANT",
+      "complianceNotes": []
+    },
+    {
       "id": "EXP-1042",
       "grantId": "GR-DST-2401",
       "vendor": "Thermo Fisher Scientific",
@@ -378,7 +407,7 @@
       "title": "UC due in 41 days",
       "message": "DST CRISPR grant UC for FY 2025-26 is due 30 Sep 2026.",
       "type": "UC_DUE",
-      "read": false
+      "read": true
     },
     {
       "id": "n2",
@@ -386,7 +415,7 @@
       "title": "Expense pending approval",
       "message": "Thermo Fisher invoice ₹4,28,500 awaits finance verification.",
       "type": "APPROVAL_PENDING",
-      "read": false
+      "read": true
     },
     {
       "id": "n3",
@@ -394,7 +423,7 @@
       "title": "Anomaly flagged",
       "message": "Duplicate bill detected on GR-DST-2401.",
       "type": "ANOMALY_DETECTED",
-      "read": false
+      "read": true
     },
     {
       "id": "n4",
@@ -402,11 +431,47 @@
       "title": "NIRF window",
       "message": "Research metrics snapshot ready for review.",
       "type": "GENERAL",
-      "read": false
+      "read": true
     }
   ],
   "approvals": [],
   "auditLogs": [
+    {
+      "id": "AL-6",
+      "action": "GENERATE_UC",
+      "entityType": "UC",
+      "entityId": "UC-1003",
+      "userId": "u-pi",
+      "createdAt": "2026-08-22T11:53:58.856Z",
+      "metadata": {}
+    },
+    {
+      "id": "AL-5",
+      "action": "CREATE_GRANT",
+      "entityType": "Grant",
+      "entityId": "GR-DST-9707",
+      "userId": "u-pi",
+      "createdAt": "2026-08-22T11:48:29.707Z",
+      "metadata": {}
+    },
+    {
+      "id": "AL-4",
+      "action": "SUBMIT_EXPENSE",
+      "entityType": "Expense",
+      "entityId": "EXP-1043",
+      "userId": "u-pi",
+      "createdAt": "2026-08-22T11:44:57.380Z",
+      "metadata": {}
+    },
+    {
+      "id": "AL-3",
+      "action": "GENERATE_UC",
+      "entityType": "UC",
+      "entityId": "UC-1002",
+      "userId": "u-pi",
+      "createdAt": "2026-08-22T10:59:13.067Z",
+      "metadata": {}
+    },
     {
       "id": "AL-2",
       "action": "GENERATE_UC",
@@ -430,13 +495,110 @@
   ],
   "ucs": [
     {
+      "id": "UC-1003",
+      "grantId": "GR-ICMR-2512",
+      "financialYear": "2025-26",
+      "period": "01 Apr 2025 – 31 Mar 2026",
+      "totalUtilized": 6900000,
+      "balanceAmount": 2950000,
+      "status": "DRAFT",
+      "createdAt": "2026-08-22T11:53:58.851Z",
+      "heads": [
+        {
+          "id": "bh-10",
+          "grantId": "GR-ICMR-2512",
+          "name": "Equipment",
+          "allocated": 4000000,
+          "spent": 2800000
+        },
+        {
+          "id": "bh-11",
+          "grantId": "GR-ICMR-2512",
+          "name": "Consumables",
+          "allocated": 2500000,
+          "spent": 1900000
+        }
+      ],
+      "expenses": []
+    },
+    {
+      "id": "UC-1002",
+      "grantId": "GR-DST-2401",
+      "financialYear": "2025-26",
+      "period": "01 Apr 2025 – 31 Mar 2026",
+      "totalUtilized": 48200,
+      "balanceAmount": 8401800,
+      "status": "APPROVED",
+      "createdAt": "2026-08-22T10:59:13.067Z",
+      "heads": [
+        {
+          "id": "bh-1",
+          "grantId": "GR-DST-2401",
+          "name": "Equipment",
+          "allocated": 3500000,
+          "spent": 2100000
+        },
+        {
+          "id": "bh-2",
+          "grantId": "GR-DST-2401",
+          "name": "Consumables",
+          "allocated": 1800000,
+          "spent": 1200000
+        },
+        {
+          "id": "bh-3",
+          "grantId": "GR-DST-2401",
+          "name": "Travel",
+          "allocated": 600000,
+          "spent": 180000
+        },
+        {
+          "id": "bh-4",
+          "grantId": "GR-DST-2401",
+          "name": "Contingency",
+          "allocated": 400000,
+          "spent": 140000
+        },
+        {
+          "id": "bh-5",
+          "grantId": "GR-DST-2401",
+          "name": "Manpower",
+          "allocated": 1500000,
+          "spent": 1500000
+        },
+        {
+          "id": "bh-6",
+          "grantId": "GR-DST-2401",
+          "name": "Overhead",
+          "allocated": 650000,
+          "spent": 500000
+        }
+      ],
+      "expenses": [
+        {
+          "id": "EXP-1041",
+          "grantId": "GR-DST-2401",
+          "vendor": "MakeMyTrip Business",
+          "invoice": "MMT-B2B-9921",
+          "amount": 48200,
+          "date": "2026-07-08",
+          "head": "Travel",
+          "status": "APPROVED",
+          "compliance": "WARNING",
+          "gst": "07AADCM5146R1ZV",
+          "description": "Conference travel Delhi–Pune",
+          "submittedById": "u-pi"
+        }
+      ]
+    },
+    {
       "id": "UC-1001",
       "grantId": "GR-DST-2401",
       "financialYear": "2025-26",
       "period": "01 Apr 2025 – 31 Mar 2026",
       "totalUtilized": 48200,
       "balanceAmount": 8401800,
-      "status": "DRAFT",
+      "status": "APPROVED",
       "createdAt": "2026-08-21T16:50:58.069Z",
       "heads": [
         {
