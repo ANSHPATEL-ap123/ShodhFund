@@ -408,6 +408,15 @@
   "approvals": [],
   "auditLogs": [
     {
+      "id": "AL-2",
+      "action": "GENERATE_UC",
+      "entityType": "UC",
+      "entityId": "UC-1001",
+      "userId": "u-pi",
+      "createdAt": "2026-08-21T16:50:58.070Z",
+      "metadata": {}
+    },
+    {
       "id": "al-1",
       "action": "SEED",
       "entityType": "System",
@@ -419,7 +428,78 @@
       }
     }
   ],
-  "ucs": [],
+  "ucs": [
+    {
+      "id": "UC-1001",
+      "grantId": "GR-DST-2401",
+      "financialYear": "2025-26",
+      "period": "01 Apr 2025 – 31 Mar 2026",
+      "totalUtilized": 48200,
+      "balanceAmount": 8401800,
+      "status": "DRAFT",
+      "createdAt": "2026-08-21T16:50:58.069Z",
+      "heads": [
+        {
+          "id": "bh-1",
+          "grantId": "GR-DST-2401",
+          "name": "Equipment",
+          "allocated": 3500000,
+          "spent": 2100000
+        },
+        {
+          "id": "bh-2",
+          "grantId": "GR-DST-2401",
+          "name": "Consumables",
+          "allocated": 1800000,
+          "spent": 1200000
+        },
+        {
+          "id": "bh-3",
+          "grantId": "GR-DST-2401",
+          "name": "Travel",
+          "allocated": 600000,
+          "spent": 180000
+        },
+        {
+          "id": "bh-4",
+          "grantId": "GR-DST-2401",
+          "name": "Contingency",
+          "allocated": 400000,
+          "spent": 140000
+        },
+        {
+          "id": "bh-5",
+          "grantId": "GR-DST-2401",
+          "name": "Manpower",
+          "allocated": 1500000,
+          "spent": 1500000
+        },
+        {
+          "id": "bh-6",
+          "grantId": "GR-DST-2401",
+          "name": "Overhead",
+          "allocated": 650000,
+          "spent": 500000
+        }
+      ],
+      "expenses": [
+        {
+          "id": "EXP-1041",
+          "grantId": "GR-DST-2401",
+          "vendor": "MakeMyTrip Business",
+          "invoice": "MMT-B2B-9921",
+          "amount": 48200,
+          "date": "2026-07-08",
+          "head": "Travel",
+          "status": "APPROVED",
+          "compliance": "WARNING",
+          "gst": "07AADCM5146R1ZV",
+          "description": "Conference travel Delhi–Pune",
+          "submittedById": "u-pi"
+        }
+      ]
+    }
+  ],
   "milestones": [
     {
       "id": "m1",
