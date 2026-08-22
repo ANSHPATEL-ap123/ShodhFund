@@ -11,3 +11,4 @@ backend/uploads
 backend/.env
 backend/data/db.json
 
+.env
