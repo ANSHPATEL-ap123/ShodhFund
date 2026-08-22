@@ -101,4 +101,40 @@ app.get('/api/export/expenses.csv', optionalAuth, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+app.post('/api/expenses/:expenseId/decide', requireAuth, async (req, res) => {
+  try {
+    const action = String(req.body.action || '').toUpperCase();
+    const statusMap = { APPROVED: 'APPROVED', REJECTED: 'REJECTED', CORRECTION_REQUESTED: 'CORRECTION_REQUESTED', SUBMITTED: 'SUBMITTED' };
+    const expense = await prisma.expense.update({ where: { id: req.params.expenseId }, data: { status: statusMap[action] || action } });
+    if (action === 'APPROVED' || action === 'REJECTED') {
+      await prisma.approval.create({ data: { expenseId: req.params.expenseId, approverId: req.user.id, action: action === 'APPROVED' ? 'APPROVED' : 'REJECTED', reason: req.body.reason } });
+    }
+    await logAction(req.user.id, 'EXPENSE_' + action, 'Expense', req.params.expenseId);
+    res.json(expense);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.patch('/api/budget-heads/:id', requireAuth, requireRole('PI', 'FINANCE', 'ADMIN'), async (req, res) => {
+  try {
+    const raw = req.body;
+    const data = {};
+    if (raw.allocated) data.allocatedAmount = parseFloat(raw.allocated);
+    if (raw.allocatedAmount) data.allocatedAmount = parseFloat(raw.allocatedAmount);
+    if (raw.name) data.name = raw.name;
+    if (raw.category) data.category = raw.category;
+    if (raw.spentAmount !== undefined) data.spentAmount = parseFloat(raw.spentAmount);
+    const head = await prisma.budgetHead.update({ where: { id: req.params.id }, data });
+    await logAction(req.user.id, 'UPDATE_BUDGET_HEAD', 'BudgetHead', head.id);
+    res.json(head);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/anomalies/:id/resolve', requireAuth, async (req, res) => {
+  try {
+    const anomaly = await prisma.anomaly.update({ where: { id: req.params.id }, data: { resolved: true } });
+    await logAction(req.user.id, 'RESOLVE_ANOMALY', 'Anomaly', anomaly.id);
+    res.json(anomaly);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 };

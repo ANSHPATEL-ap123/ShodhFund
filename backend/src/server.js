@@ -95,7 +95,8 @@ app.get('/api/grants', optionalAuth, async (req, res) => {
       include: { pi: { select: { id: true, name: true, email: true, department: true } }, budgetHeads: true, _count: { select: { expenses: true, milestones: true } } },
       orderBy: { createdAt: 'desc' }
     });
-    res.json(grants);
+    const mapped = grants.map(g => ({...g, pi: g.pi?.name || '', department: g.pi?.department || ''}));
+    res.json(mapped);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -106,7 +107,7 @@ app.get('/api/grants/:id', optionalAuth, async (req, res) => {
       include: { pi: { select: { id: true, name: true, email: true, department: true } }, budgetHeads: { include: { expenses: true } }, expenses: { include: { submittedBy: { select: { name: true } }, approvals: true, anomalies: true }, orderBy: { createdAt: 'desc' } }, milestones: true, ucs: true, objections: true }
     });
     if (!grant) return res.status(404).json({ error: 'Grant not found' });
-    res.json(grant);
+    res.json(flatGrant);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
