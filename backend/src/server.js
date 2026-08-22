@@ -1,3 +1,4 @@
+require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
@@ -428,4 +429,8 @@ app.post('/api/ask', optionalAuth, async (req, res) => {
 app.get('/api/health', (req, res) => res.json({ status: 'ok', db: 'prisma', time: new Date().toISOString() }));
 
 // ─── Start ─────────────────────────────────────────────
+
+const addAliases = require('./server-alias.js');
+addAliases(app, prisma, optionalAuth, requireAuth, requireRole, logAction);
+
 app.listen(PORT, () => console.log(`🚀 ShodhFund API on port ${PORT} (Prisma+Neon)`));
