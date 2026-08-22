@@ -287,7 +287,7 @@ export async function handleApi(req: NextRequest, parts: string[]) {
       if (file && typeof (file as File).arrayBuffer === "function") {
         buffer = Buffer.from(await (file as File).arrayBuffer());
       }
-      const extracted = await extractBill({ filename, hint: filename, buffer });
+      const extracted = await extractBill({ filename, hint: filename, buffer: buffer! });
       return json({ ...extracted, compliance: "PENDING" });
     }
     if (path === "uc/generate" && method === "POST") {
